@@ -7,49 +7,58 @@ import { supabase } from '../../lib/supabaseClient';
 const statusLabel = { review: 'Listo para revisar', published: 'Publicado', rejected: 'Necesita nuevo archivo' };
 const SITE_DOMAIN = 'https://cutzstudio.vercel.app';
 
+function slugify(text) {
+  return text
+    .toString()
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca acentos
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
 export default function PanelPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
   const [loadingSession, setLoadingSession] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copiedId, setCopiedId] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [alto, setAlto] = useState('');
   const [ancho, setAncho] = useState('');
   const [fondo, setFondo] = useState('');
+  const [slug, setSlug] = useState('');
+  const [slugTouched, setSlugTouched] = useState(false);
   const [file, setFile] = useState(null);
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.push('/login');
-        return;
-      }
+      if (!session) { router.push('/login'); return; }
       setUser(session.user);
       setLoadingSession(false);
     });
   }, [router]);
 
-  useEffect(() => {
-    if (user) fetchProducts();
-  }, [user]);
+  useEffect(() => { if (user) fetchProducts(); }, [user]);
 
   async function fetchProducts() {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
     if (!error) setProducts(data);
   }
 
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/login');
+  }
+
+  function handleNameChange(v) {
+    setName(v);
+    if (!slugTouched) setSlug(slugify(v));
   }
 
   async function handleSubmit(e) {
@@ -60,12 +69,15 @@ export default function PanelPage() {
       setFormError('Subí un archivo .glb — es lo único que hace que el modelo sea real.');
       return;
     }
+    if (!slug) {
+      setFormError('El slug no puede estar vacío — tiene que coincidir con la URL del producto en el sitio del cliente.');
+      return;
+    }
 
     setSaving(true);
 
     const path = `${user.id}/${crypto.randomUUID()}.glb`;
     const { error: uploadError } = await supabase.storage.from('models').upload(path, file);
-
     if (uploadError) {
       setFormError('Error subiendo el archivo: ' + uploadError.message);
       setSaving(false);
@@ -76,11 +88,9 @@ export default function PanelPage() {
 
     const { error: insertError } = await supabase.from('products').insert({
       owner_id: user.id,
-      name,
-      price,
-      alto: Number(alto),
-      ancho: Number(ancho),
-      fondo: Number(fondo),
+      name, price,
+      alto: Number(alto), ancho: Number(ancho), fondo: Number(fondo),
+      slug,
       model_url: publicUrlData.publicUrl,
       is_real_model: true,
       status: 'review',
@@ -89,11 +99,15 @@ export default function PanelPage() {
     setSaving(false);
 
     if (insertError) {
-      setFormError('Error guardando el producto: ' + insertError.message);
+      setFormError(
+        insertError.message.includes('duplicate')
+          ? 'Ya tenés otro producto con ese mismo slug. Cambialo por uno distinto.'
+          : 'Error guardando el producto: ' + insertError.message
+      );
       return;
     }
 
-    setName(''); setPrice(''); setAlto(''); setAncho(''); setFondo(''); setFile(null);
+    setName(''); setPrice(''); setAlto(''); setAncho(''); setFondo(''); setSlug(''); setSlugTouched(false); setFile(null);
     setShowForm(false);
     fetchProducts();
   }
@@ -109,13 +123,13 @@ export default function PanelPage() {
     fetchProducts();
   }
 
-  function copyEmbedCode(product) {
+  function copyInstallSnippet() {
     const snippet =
       `<script src="${SITE_DOMAIN}/widget.js"></script>\n` +
-      `<div data-ebano-product="${product.id}"></div>`;
+      `<div data-ebano-auto></div>`;
     navigator.clipboard.writeText(snippet).then(() => {
-      setCopiedId(product.id);
-      setTimeout(() => setCopiedId(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     });
   }
 
@@ -123,7 +137,7 @@ export default function PanelPage() {
 
   return (
     <main style={{ padding: '32px 5vw', maxWidth: 900 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 26 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
         <div>
           <div className="mono" style={{ fontSize: 12, color: '#8a8375' }}>ÉBANO · PANEL</div>
           <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: 26, marginTop: 4 }}>Productos</h1>
@@ -137,19 +151,52 @@ export default function PanelPage() {
         </div>
       </div>
 
+      {/* --- Instalación única, siempre visible arriba --- */}
+      <div style={{ background: '#f3ede0', border: '1px solid var(--line)', borderRadius: 4, padding: '16px 18px', marginBottom: 22 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setShowInstall(!showInstall)}>
+          <strong style={{ fontSize: 13.5 }}>📎 Instalación en el sitio del cliente (se hace una sola vez)</strong>
+          <span className="mono" style={{ fontSize: 12 }}>{showInstall ? '▲' : '▼'}</span>
+        </div>
+        {showInstall && (
+          <div style={{ marginTop: 14 }}>
+            <p style={{ fontSize: 13, color: '#4a453e', lineHeight: 1.5, marginBottom: 10 }}>
+              Este código se pega <strong>una sola vez</strong>, en la plantilla de ficha de producto del sitio
+              (no en cada producto por separado). A partir de ahí, cada producto que publiques acá aparece
+              solo en su página correspondiente — siempre que el <strong>slug</strong> coincida con la URL.
+            </p>
+            <pre className="mono" style={{ background: '#211D18', color: '#EDE6D8', padding: '12px 14px', borderRadius: 4, fontSize: 12, overflowX: 'auto' }}>
+{`<script src="${SITE_DOMAIN}/widget.js"></script>\n<div data-ebano-auto></div>`}
+            </pre>
+            <button className="btn btn-ghost" style={{ marginTop: 10, fontSize: 12, padding: '7px 12px' }} onClick={copyInstallSnippet}>
+              {copied ? '✓ Copiado' : 'Copiar código de instalación'}
+            </button>
+          </div>
+        )}
+      </div>
+
       {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 4, padding: 22, marginBottom: 26 }}
-        >
+        <form onSubmit={handleSubmit} style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 4, padding: 22, marginBottom: 26 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
             <div>
               <label>Nombre</label>
-              <input value={name} onChange={e => setName(e.target.value)} required />
+              <input value={name} onChange={e => handleNameChange(e.target.value)} required />
             </div>
             <div>
               <label>Precio</label>
               <input value={price} onChange={e => setPrice(e.target.value)} placeholder="$ 210.000" required />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label>Slug (tiene que ser igual al de la URL del producto en el sitio del cliente)</label>
+            <input
+              value={slug}
+              onChange={e => { setSlug(slugify(e.target.value)); setSlugTouched(true); }}
+              placeholder="sillon-estocolmo"
+              required
+            />
+            <div style={{ fontSize: 11.5, color: '#8a8375', marginTop: 6 }}>
+              Si la ficha del producto en el sitio del cliente es .../productos/<strong>sillon-estocolmo</strong>, el slug tiene que ser exactamente ese.
             </div>
           </div>
 
@@ -179,13 +226,14 @@ export default function PanelPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr className="mono" style={{ fontSize: 11, textTransform: 'uppercase', color: '#8a8375' }}>
-              <th style={th}>Producto</th><th style={th}>Medidas</th><th style={th}>Estado</th><th style={th}></th>
+              <th style={th}>Producto</th><th style={th}>Slug</th><th style={th}>Medidas</th><th style={th}>Estado</th><th style={th}></th>
             </tr>
           </thead>
           <tbody>
             {products.map(p => (
               <tr key={p.id}>
                 <td style={td}><strong>{p.name}</strong><div className="mono" style={{ fontSize: 11.5, color: '#8a8375' }}>{p.price}</div></td>
+                <td style={td}><span className="mono" style={{ fontSize: 11.5, color: '#8a8375' }}>{p.slug || '—'}</span></td>
                 <td style={td}><span className="mono" style={{ fontSize: 11.5, color: '#8a8375' }}>{p.alto} × {p.ancho} × {p.fondo} cm</span></td>
                 <td style={td}><span className={`badge ${p.status}`}><span className="bd"></span>{statusLabel[p.status]}</span></td>
                 <td style={{ ...td, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -195,21 +243,12 @@ export default function PanelPage() {
                       <button className="btn btn-rust" style={{ padding: '6px 10px', fontSize: 11.5 }} onClick={() => setStatus(p.id, 'rejected')}>Rechazar</button>
                     </>
                   )}
-                  {p.status === 'published' && (
-                    <button
-                      className="btn btn-ghost"
-                      style={{ padding: '6px 10px', fontSize: 11.5 }}
-                      onClick={() => copyEmbedCode(p)}
-                    >
-                      {copiedId === p.id ? '✓ Copiado' : 'Copiar código'}
-                    </button>
-                  )}
                   <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11.5 }} onClick={() => deleteProduct(p.id)}>Borrar</button>
                 </td>
               </tr>
             ))}
             {products.length === 0 && (
-              <tr><td style={td} colSpan={4}>Todavía no cargaste productos.</td></tr>
+              <tr><td style={td} colSpan={5}>Todavía no cargaste productos.</td></tr>
             )}
           </tbody>
         </table>
