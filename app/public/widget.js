@@ -121,7 +121,7 @@
         '  <div class="ebn-frame">' +
         '    <model-viewer src="' + escapeAttr(product.model_url) + '" camera-controls auto-rotate' +
         '      shadow-intensity="1" exposure="0.95" environment-image="neutral"' +
-        '      camera-orbit="35deg 78deg 2.6m" ar ar-modes="webxr scene-viewer quick-look">' +
+        '      camera-orbit="35deg 78deg 2.6m" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed">' +
         '      <button slot="ar-button" class="ebn-ar-btn">Ver en tu espacio (AR)</button>' +
         '    </model-viewer>' +
         '  </div>' +
