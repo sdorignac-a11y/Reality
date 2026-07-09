@@ -1,35 +1,36 @@
 /**
- * Ébano — Widget embebible
+ * Reality — Widget embebible (v2, botón flotante)
  * ==========================================================
- * Cómo lo usa una mueblería en SU sitio (sitio ajeno):
+ * Instalación única (se pega UNA VEZ en la plantilla de ficha
+ * de producto del sitio del cliente):
  *
  *   <script src="https://TU-DOMINIO.vercel.app/widget.js"></script>
- *   <div data-ebano-product="ID-DEL-PRODUCTO-EN-SUPABASE"></div>
+ *   <div data-ebano-auto></div>
  *
- * El ID del producto es el UUID que le asigna Supabase a cada
- * fila de la tabla "products" (columna "id"). Se consigue
- * entrando a Supabase → Table Editor → products → copiar el
- * valor de "id" de la fila que querés mostrar.
+ * También sigue funcionando el modo manual (compatibilidad):
+ *   <div data-ebano-product="ID-o-slug-del-producto"></div>
+ *
+ * El widget aparece como un botón flotante abajo a la derecha.
+ * Al tocarlo, ofrece dos opciones:
+ *   1) Ver el producto de esta página en 3D / AR
+ *   2) Subir una foto del espacio y elegir del catálogo qué mueble probar
+ *      (por ahora es una búsqueda manual — la sugerencia automática
+ *      por IA todavía no está conectada)
  * ==========================================================
  */
 (function () {
   'use strict';
 
   // -----------------------------------------------------------
-  // CONFIGURACIÓN — completar con los datos reales del proyecto
-  // (son los mismos valores que están en .env.local)
-  // -----------------------------------------------------------
-  var SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
-  var SUPABASE_ANON_KEY = 'TU-ANON-KEY-PUBLICA';
+  var SUPABASE_URL = 'https://loqapxtmxrdnzxencgxs.supabase.co';
+  var SUPABASE_ANON_KEY = 'sb_publishable_C6HGGPizWvwmyttbvIC6UA_5gLeeh_1';
   // -----------------------------------------------------------
 
   var MODEL_VIEWER_SRC = 'https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js';
   var modelViewerLoading = null;
 
   function ensureModelViewer() {
-    if (window.customElements && window.customElements.get('model-viewer')) {
-      return Promise.resolve();
-    }
+    if (window.customElements && window.customElements.get('model-viewer')) return Promise.resolve();
     if (modelViewerLoading) return modelViewerLoading;
     modelViewerLoading = new Promise(function (resolve, reject) {
       var script = document.createElement('script');
@@ -42,118 +43,40 @@
     return modelViewerLoading;
   }
 
-  function fetchProduct(productId) {
-    var url = SUPABASE_URL + '/rest/v1/products?id=eq.' + encodeURIComponent(productId) +
-      '&status=eq.published&select=id,name,price,alto,ancho,fondo,model_url';
-    return fetchFromSupabase(url);
+  function fetchFromSupabase(url) {
+    return fetch(url, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY },
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('No se pudo consultar Supabase');
+        return res.json();
+      });
+  }
+
+  function fetchProductById(id) {
+    var url = SUPABASE_URL + '/rest/v1/products?id=eq.' + encodeURIComponent(id) +
+      '&status=eq.published&select=id,name,price,alto,ancho,fondo,model_url,slug';
+    return fetchFromSupabase(url).then(function (rows) {
+      if (!rows.length) throw new Error('Producto no encontrado');
+      return rows[0];
+    });
   }
 
   function fetchProductBySlug(slug) {
     var url = SUPABASE_URL + '/rest/v1/products?slug=eq.' + encodeURIComponent(slug) +
-      '&status=eq.published&select=id,name,price,alto,ancho,fondo,model_url';
+      '&status=eq.published&select=id,name,price,alto,ancho,fondo,model_url,slug';
+    return fetchFromSupabase(url).then(function (rows) { return rows.length ? rows[0] : null; });
+  }
+
+  function fetchCatalog() {
+    var url = SUPABASE_URL + '/rest/v1/products?status=eq.published' +
+      '&select=id,name,price,alto,ancho,fondo,model_url,slug&order=created_at.desc';
     return fetchFromSupabase(url);
   }
 
-  function fetchFromSupabase(url) {
-    return fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
-      },
-    })
-      .then(function (res) {
-        if (!res.ok) throw new Error('No se pudo consultar el producto');
-        return res.json();
-      })
-      .then(function (rows) {
-        if (!rows || rows.length === 0) {
-          throw new Error('Producto no encontrado o no publicado');
-        }
-        return rows[0];
-      });
-  }
-
-  // Deriva un slug candidato del último segmento de la URL actual.
-  // Ej: https://sitio.com/productos/sillon-estocolmo -> "sillon-estocolmo"
   function slugFromUrl() {
     var parts = window.location.pathname.split('/').filter(Boolean);
     return parts.length ? decodeURIComponent(parts[parts.length - 1]) : null;
-  }
-
-  function buildWidget(container, product) {
-    // Shadow DOM: aísla por completo los estilos del widget de los
-    // del sitio anfitrión, para que no choquen entre sí.
-    var root = container.attachShadow ? container.attachShadow({ mode: 'open' }) : container;
-
-    var style = document.createElement('style');
-    style.textContent = [
-      ':host { all: initial; }',
-      '.ebn-box { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-      '  border: 1px solid #E4DED0; background: #FBF9F4; border-radius: 8px; padding: 14px 16px; }',
-      '.ebn-badge { display:inline-block; font-family: monospace; font-size: 10px; color: #8a7d63;',
-      '  background: #F1EAD9; padding: 3px 8px; border-radius: 20px; letter-spacing: .03em; margin-bottom: 10px; }',
-      '.ebn-btn { width: 100%; background: #332C24; color: #EDE6D8; border: none;',
-      '  padding: 13px; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }',
-      '.ebn-btn:hover { background: #211D18; }',
-      '.ebn-hint { font-size: 11.5px; color: #8a8375; margin-top: 8px; text-align: center; }',
-      '.ebn-overlay { position: fixed; inset: 0; background: rgba(17,19,24,.6); display: flex;',
-      '  align-items: center; justify-content: center; z-index: 999999; }',
-      '.ebn-modal { background: #F7F3EA; width: 520px; max-width: 92vw; border-radius: 10px; padding: 20px;',
-      '  font-family: -apple-system, BlinkMacSystemFont, sans-serif; }',
-      '.ebn-modal-top { display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px; }',
-      '.ebn-close { background: none; border: none; font-size: 18px; color: #8a8375; cursor: pointer; }',
-      '.ebn-frame { width: 100%; height: 320px; background: #fbfaf6; border-radius: 8px; overflow: hidden; }',
-      'model-viewer { width: 100%; height: 100%; }',
-      '.ebn-ar-btn { background: #6B4A32; color: #fff; border: none; padding: 10px 16px;',
-      '  border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; }',
-      '.ebn-modal-hint { font-size: 11.5px; color: #8a8375; margin-top: 10px; }',
-      '.ebn-poweredby { font-size: 10.5px; color: #a89a7d; margin-top: 14px; text-align: center;',
-      '  font-family: monospace; }',
-    ].join('\n');
-    root.appendChild(style);
-
-    var box = document.createElement('div');
-    box.className = 'ebn-box';
-    box.innerHTML =
-      '<span class="ebn-badge">AR · Ébano</span>' +
-      '<button class="ebn-btn" type="button">Ver este mueble en tu casa</button>' +
-      '<div class="ebn-hint">Probalo a escala real con la cámara de tu celular</div>';
-    root.appendChild(box);
-
-    box.querySelector('.ebn-btn').addEventListener('click', function () {
-      openARModal(root, product);
-    });
-  }
-
-  function openARModal(root, product) {
-    ensureModelViewer().then(function () {
-      var overlay = document.createElement('div');
-      overlay.className = 'ebn-overlay';
-      overlay.innerHTML =
-        '<div class="ebn-modal">' +
-        '  <div class="ebn-modal-top">' +
-        '    <strong>' + escapeHtml(product.name) + ' — ' + escapeHtml(product.price) + '</strong>' +
-        '    <button class="ebn-close" type="button">✕</button>' +
-        '  </div>' +
-        '  <div class="ebn-frame">' +
-        '    <model-viewer src="' + escapeAttr(product.model_url) + '" camera-controls auto-rotate' +
-        '      shadow-intensity="1" exposure="0.95" environment-image="neutral"' +
-        '      camera-orbit="35deg 78deg 2.6m" ar ar-modes="webxr scene-viewer quick-look">' +
-        '      <button slot="ar-button" class="ebn-ar-btn">Ver en tu espacio (AR)</button>' +
-        '    </model-viewer>' +
-        '  </div>' +
-        '  <p class="ebn-modal-hint">Desde el celular esto abre la cámara real. ' +
-             product.alto + ' × ' + product.ancho + ' × ' + product.fondo + ' cm.</p>' +
-        '  <div class="ebn-poweredby">⚡ Powered by Ébano</div>' +
-        '</div>';
-      root.appendChild(overlay);
-      overlay.querySelector('.ebn-close').addEventListener('click', function () {
-        overlay.remove();
-      });
-      overlay.addEventListener('click', function (e) {
-        if (e.target === overlay) overlay.remove();
-      });
-    });
   }
 
   function escapeHtml(str) {
@@ -161,48 +84,224 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function escapeAttr(str) {
-    return escapeHtml(str);
-  }
 
-  function showError(container, message) {
-    container.innerHTML =
-      '<div style="font-family:sans-serif;font-size:12px;color:#8C3B2E;">' +
-      'Reality AR: ' + escapeHtml(message) + '</div>';
-    console.error('[Reality widget]', message);
-  }
+  // -----------------------------------------------------------
+  // UI: host flotante con Shadow DOM (aislado del sitio anfitrión)
+  // -----------------------------------------------------------
+  function buildFAB(currentProduct) {
+    var host = document.createElement('div');
+    host.style.all = 'initial';
+    document.body.appendChild(host);
+    var root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
 
-  function init() {
-    // Modo manual (compatibilidad con instalaciones anteriores):
-    // <div data-ebano-product="UUID-o-slug"></div>
-    var manual = document.querySelectorAll('[data-ebano-product]');
-    manual.forEach(function (container) {
-      var productId = container.getAttribute('data-ebano-product');
-      if (!productId) return;
-      fetchProduct(productId)
-        .then(function (product) { buildWidget(container, product); })
-        .catch(function (err) { showError(container, err.message); });
+    var style = document.createElement('style');
+    style.textContent = [
+      '*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}',
+      '.fab{position:fixed;bottom:22px;right:22px;width:58px;height:58px;',
+      '  background:#332C24;border-radius:50% 50% 4px 50%;transform:rotate(45deg);',
+      '  box-shadow:0 10px 26px -8px rgba(0,0,0,.45);cursor:pointer;z-index:999999;',
+      '  display:flex;align-items:center;justify-content:center;border:none;transition:transform .2s ease;}',
+      '.fab:hover{transform:rotate(45deg) scale(1.06);}',
+      '.fab svg{width:22px;height:22px;transform:rotate(-45deg);color:#EDE6D8;}',
+      '.menu{position:fixed;bottom:92px;right:22px;z-index:999999;',
+      '  display:flex;flex-direction:column;gap:10px;align-items:flex-end;}',
+      '.menu.hidden{display:none;}',
+      '.menu-item{background:#F7F3EA;border:1px solid #DED5C2;border-radius:10px;',
+      '  padding:13px 16px;font-size:13.5px;font-weight:600;color:#211D18;cursor:pointer;',
+      '  box-shadow:0 12px 24px -10px rgba(0,0,0,.3);white-space:nowrap;display:flex;align-items:center;gap:10px;}',
+      '.menu-item:hover{background:#EDE6D8;}',
+      '.menu-item .ic{font-size:15px;}',
+      '.overlay{position:fixed;inset:0;background:rgba(17,19,24,.6);display:none;',
+      '  align-items:center;justify-content:center;z-index:9999999;padding:20px;}',
+      '.overlay.open{display:flex;}',
+      '.modal{background:#F7F3EA;width:540px;max-width:100%;border-radius:12px;padding:22px;',
+      '  max-height:88vh;overflow-y:auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}',
+      '.modal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}',
+      '.modal-top strong{font-size:15px;}',
+      '.close{background:none;border:none;font-size:19px;color:#8a8375;cursor:pointer;}',
+      '.frame{width:100%;height:300px;background:#fbfaf6;border-radius:8px;overflow:hidden;margin-bottom:8px;}',
+      'model-viewer{width:100%;height:100%;}',
+      '.ar-btn{background:#6B4A32;color:#fff;border:none;padding:10px 16px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;}',
+      '.hint{font-size:11.5px;color:#8a8375;margin-top:8px;}',
+      '.poweredby{font-size:10.5px;color:#a89a7d;margin-top:14px;text-align:center;font-family:monospace;}',
+
+      '.upload-zone{border:1.5px dashed #DED5C2;border-radius:10px;padding:26px;text-align:center;',
+      '  cursor:pointer;background:#fff;margin-bottom:16px;}',
+      '.upload-zone img{max-width:100%;max-height:160px;border-radius:6px;}',
+      '.upload-zone p{font-size:12.5px;color:#8a8375;margin-top:8px;}',
+      '.cat-note{font-size:12px;color:#8a8375;background:#F1EAD9;padding:10px 12px;border-radius:6px;margin-bottom:16px;line-height:1.5;}',
+      '.cat-list{display:flex;flex-direction:column;gap:10px;}',
+      '.cat-item{display:flex;justify-content:space-between;align-items:center;',
+      '  border:1px solid #DED5C2;border-radius:8px;padding:12px 14px;background:#fff;}',
+      '.cat-item .info strong{font-size:13.5px;display:block;}',
+      '.cat-item .info span{font-size:11.5px;color:#8a8375;font-family:monospace;}',
+      '.cat-item button{background:#332C24;color:#EDE6D8;border:none;padding:8px 13px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;}',
+      '.empty{font-size:13px;color:#8a8375;text-align:center;padding:20px 0;}',
+    ].join('\n');
+    root.appendChild(style);
+
+    var fab = document.createElement('button');
+    fab.className = 'fab';
+    fab.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-4 4.5-7 8.2-7 11.5A7 7 0 0012 20a7 7 0 007-6.5C19 10.2 16 6.5 12 2z"/></svg>';
+    root.appendChild(fab);
+
+    var menu = document.createElement('div');
+    menu.className = 'menu hidden';
+    menu.innerHTML =
+      (currentProduct
+        ? '<div class="menu-item" id="opt3d"><span class="ic">🪑</span> Ver este producto en 3D</div>'
+        : '') +
+      '<div class="menu-item" id="optCatalog"><span class="ic">📷</span> Probar un mueble en tu espacio</div>';
+    root.appendChild(menu);
+
+    fab.addEventListener('click', function () {
+      menu.classList.toggle('hidden');
+    });
+    document.addEventListener('click', function (e) {
+      if (!host.contains(e.target) && e.target !== host) {
+        // click afuera del shadow host - shadow DOM ya aísla, así que solo cerramos si el click no vino de adentro
+      }
     });
 
-    // Modo automático (instalación única en la plantilla del sitio):
-    // <div data-ebano-auto></div>
-    // Detecta el producto solo, leyendo el slug de la URL actual.
-    var auto = document.querySelectorAll('[data-ebano-auto]');
-    if (auto.length) {
-      var slug = slugFromUrl();
-      if (!slug) {
-        auto.forEach(function (c) { showError(c, 'no se pudo detectar el producto en esta URL'); });
-        return;
-      }
-      auto.forEach(function (container) {
-        fetchProductBySlug(slug)
-          .then(function (product) { buildWidget(container, product); })
-          .catch(function () {
-            // Si no hay producto para este slug, no mostramos error visible:
-            // simplemente esta página no tiene un producto cargado en Reality todavía.
-            container.style.display = 'none';
-          });
+    var arOverlay = buildAROverlay(root);
+    var catalogOverlay = buildCatalogOverlay(root, arOverlay);
+
+    if (currentProduct) {
+      root.getElementById ? null : null;
+      menu.querySelector('#opt3d').addEventListener('click', function () {
+        menu.classList.add('hidden');
+        openAR(arOverlay, currentProduct);
       });
+    }
+    menu.querySelector('#optCatalog').addEventListener('click', function () {
+      menu.classList.add('hidden');
+      openCatalog(catalogOverlay);
+    });
+  }
+
+  function buildAROverlay(root) {
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML =
+      '<div class="modal">' +
+      '  <div class="modal-top"><strong id="arTitle"></strong><button class="close">✕</button></div>' +
+      '  <div class="frame"><model-viewer id="arViewer" camera-controls auto-rotate shadow-intensity="1" exposure="0.95" environment-image="neutral" camera-orbit="35deg 78deg 2.6m" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed" ar-placement="floor">' +
+      '    <button slot="ar-button" class="ar-btn">Ver en tu espacio (AR)</button>' +
+      '  </model-viewer></div>' +
+      '  <p class="hint">Desde el celular esto abre la cámara real, a escala bloqueada.</p>' +
+      '  <div class="poweredby">⚡ Powered by Reality</div>' +
+      '</div>';
+    root.appendChild(overlay);
+    overlay.querySelector('.close').addEventListener('click', function () { overlay.classList.remove('open'); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.classList.remove('open'); });
+    return overlay;
+  }
+
+  function openAR(overlay, product) {
+    ensureModelViewer().then(function () {
+      overlay.querySelector('#arTitle').textContent = product.name + ' — ' + product.price;
+      overlay.querySelector('#arViewer').setAttribute('src', product.model_url);
+      overlay.classList.add('open');
+    });
+  }
+
+  function buildCatalogOverlay(root, arOverlay) {
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML =
+      '<div class="modal">' +
+      '  <div class="modal-top"><strong>Probá un mueble en tu espacio</strong><button class="close">✕</button></div>' +
+      '  <div class="upload-zone" id="uploadZone">' +
+      '    <div id="uploadPlaceholder">📷<p>Subí una foto del lugar donde querés probar un mueble (opcional, por ahora es solo de referencia)</p></div>' +
+      '    <img id="uploadPreview" style="display:none;">' +
+      '    <input type="file" id="uploadInput" accept="image/*" style="display:none;">' +
+      '  </div>' +
+      '  <div class="cat-note">Por ahora elegís vos del catálogo cuál mueble probar — la sugerencia automática según tu foto está en camino.</div>' +
+      '  <div class="cat-list" id="catList"><div class="empty">Cargando catálogo…</div></div>' +
+      '  <div class="poweredby">⚡ Powered by Reality</div>' +
+      '</div>';
+    root.appendChild(overlay);
+
+    var zone = overlay.querySelector('#uploadZone');
+    var input = overlay.querySelector('#uploadInput');
+    var preview = overlay.querySelector('#uploadPreview');
+    var placeholder = overlay.querySelector('#uploadPlaceholder');
+    zone.addEventListener('click', function () { input.click(); });
+    input.addEventListener('change', function (e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        preview.src = ev.target.result;
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    overlay.querySelector('.close').addEventListener('click', function () { overlay.classList.remove('open'); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.classList.remove('open'); });
+
+    overlay._loaded = false;
+    return overlay;
+  }
+
+  function openCatalog(overlay) {
+    overlay.classList.add('open');
+    if (overlay._loaded) return;
+    overlay._loaded = true;
+    var list = overlay.querySelector('#catList');
+    fetchCatalog()
+      .then(function (products) {
+        if (!products.length) {
+          list.innerHTML = '<div class="empty">Todavía no hay productos publicados.</div>';
+          return;
+        }
+        list.innerHTML = products.map(function (p) {
+          return '<div class="cat-item" data-id="' + p.id + '">' +
+            '<div class="info"><strong>' + escapeHtml(p.name) + '</strong><span>' + escapeHtml(p.price) + ' · ' + p.alto + '×' + p.ancho + '×' + p.fondo + ' cm</span></div>' +
+            '<button>Ver en 3D</button></div>';
+        }).join('');
+        list.querySelectorAll('.cat-item button').forEach(function (btn, i) {
+          btn.addEventListener('click', function () {
+            var arOverlay = overlay.getRootNode().querySelector('.overlay:not(#' + overlay.id + ')') || null;
+          });
+        });
+        // conectar cada item con el visor AR (buscamos el overlay hermano dentro del mismo shadow root)
+        var root = overlay.getRootNode();
+        var arOverlay = Array.prototype.filter.call(root.querySelectorAll('.overlay'), function (o) { return o !== overlay; })[0];
+        list.querySelectorAll('.cat-item').forEach(function (item, i) {
+          item.querySelector('button').addEventListener('click', function () {
+            overlay.classList.remove('open');
+            openAR(arOverlay, products[i]);
+          });
+        });
+      })
+      .catch(function () {
+        list.innerHTML = '<div class="empty">No se pudo cargar el catálogo.</div>';
+      });
+  }
+
+  // -----------------------------------------------------------
+  function init() {
+    var manual = document.querySelector('[data-ebano-product]');
+    var auto = document.querySelector('[data-ebano-auto]');
+
+    if (manual) {
+      var idOrSlug = manual.getAttribute('data-ebano-product');
+      fetchProductById(idOrSlug)
+        .catch(function () { return fetchProductBySlug(idOrSlug); })
+        .then(function (p) { buildFAB(p); })
+        .catch(function () { buildFAB(null); });
+      return;
+    }
+
+    if (auto) {
+      var slug = slugFromUrl();
+      if (!slug) { buildFAB(null); return; }
+      fetchProductBySlug(slug)
+        .then(function (p) { buildFAB(p); })
+        .catch(function () { buildFAB(null); });
     }
   }
 
