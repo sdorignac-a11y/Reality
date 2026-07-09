@@ -97,13 +97,11 @@
     var style = document.createElement('style');
     style.textContent = [
       '*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}',
-      '.fab{position:fixed;bottom:22px;right:22px;width:58px;height:58px;',
-      '  background:#332C24;border-radius:50% 50% 4px 50%;transform:rotate(45deg);',
-      '  box-shadow:0 10px 26px -8px rgba(0,0,0,.45);cursor:pointer;z-index:999999;',
-      '  display:flex;align-items:center;justify-content:center;border:none;transition:transform .2s ease;}',
-      '.fab:hover{transform:rotate(45deg) scale(1.06);}',
-      '.fab svg{width:22px;height:22px;transform:rotate(-45deg);color:#EDE6D8;}',
-      '.menu{position:fixed;bottom:92px;right:22px;z-index:999999;',
+      '.fab-wrap{position:fixed;bottom:12px;right:12px;width:80px;height:80px;z-index:999999;cursor:pointer;border:none;background:none;padding:0;}',
+      '.fab-wrap svg{width:100%;height:100%;filter:drop-shadow(0 10px 18px rgba(0,0,0,.35));transition:transform .2s ease;display:block;}',
+      '.fab-wrap:hover svg{transform:scale(1.07) rotate(-3deg);}',
+      '.fab-icon{position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);width:24px;height:24px;color:#F7F3EA;pointer-events:none;}',
+      '.menu{position:fixed;bottom:100px;right:20px;z-index:999999;',
       '  display:flex;flex-direction:column;gap:10px;align-items:flex-end;}',
       '.menu.hidden{display:none;}',
       '.menu-item{background:#F7F3EA;border:1px solid #DED5C2;border-radius:10px;',
@@ -141,8 +139,15 @@
     root.appendChild(style);
 
     var fab = document.createElement('button');
-    fab.className = 'fab';
-    fab.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-4 4.5-7 8.2-7 11.5A7 7 0 0012 20a7 7 0 007-6.5C19 10.2 16 6.5 12 2z"/></svg>';
+    fab.className = 'fab-wrap';
+    fab.style.position = 'relative';
+    fab.innerHTML =
+      '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+      '  <path fill="#A8632C" d="M50 4 C56 4 57 16 62 18 C68 20 78 12 82 17 C86 22 78 30 80 36 C82 42 95 44 95 51 C95 58 83 59 80 65 C77 71 84 82 78 86 C72 90 63 80 57 82 C51 84 48 96 41 96 C34 96 33 84 27 81 C21 78 10 85 6 79 C2 73 12 64 10 58 C8 52 -3 49 -1 42 C1 35 14 36 18 31 C22 26 17 14 24 10 C31 6 39 17 45 15 C48 14 47 4 50 4 Z"/>' +
+      '</svg>' +
+      '<svg class="fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+      '  <path d="M4 20h16M6 20V10l6-5 6 5v10"/><path d="M10 20v-5h4v5"/>' +
+      '</svg>';
     root.appendChild(fab);
 
     var menu = document.createElement('div');
@@ -157,11 +162,17 @@
     fab.addEventListener('click', function () {
       menu.classList.toggle('hidden');
     });
+    document.addEventListener('click', function (e) {
+      if (!host.contains(e.target) && e.target !== host) {
+        // click afuera del shadow host - shadow DOM ya aísla, así que solo cerramos si el click no vino de adentro
+      }
+    });
 
     var arOverlay = buildAROverlay(root);
-    var catalogOverlay = buildCatalogOverlay(root);
+    var catalogOverlay = buildCatalogOverlay(root, arOverlay);
 
     if (currentProduct) {
+      root.getElementById ? null : null;
       menu.querySelector('#opt3d').addEventListener('click', function () {
         menu.classList.add('hidden');
         openAR(arOverlay, currentProduct);
@@ -169,7 +180,7 @@
     }
     menu.querySelector('#optCatalog').addEventListener('click', function () {
       menu.classList.add('hidden');
-      openCatalog(catalogOverlay, arOverlay);
+      openCatalog(catalogOverlay);
     });
   }
 
@@ -199,7 +210,7 @@
     });
   }
 
-  function buildCatalogOverlay(root) {
+  function buildCatalogOverlay(root, arOverlay) {
     var overlay = document.createElement('div');
     overlay.className = 'overlay';
     overlay.innerHTML =
@@ -240,7 +251,7 @@
     return overlay;
   }
 
-  function openCatalog(overlay, arOverlay) {
+  function openCatalog(overlay) {
     overlay.classList.add('open');
     if (overlay._loaded) return;
     overlay._loaded = true;
@@ -252,8 +263,18 @@
           return;
         }
         list.innerHTML = products.map(function (p) {
-          return '<div class="cat-item"><div class="info"><strong>' + escapeHtml(p.name) + '</strong><span>' + escapeHtml(p.price) + ' · ' + p.alto + '×' + p.ancho + '×' + p.fondo + ' cm</span></div><button>Ver en 3D</button></div>';
+          return '<div class="cat-item" data-id="' + p.id + '">' +
+            '<div class="info"><strong>' + escapeHtml(p.name) + '</strong><span>' + escapeHtml(p.price) + ' · ' + p.alto + '×' + p.ancho + '×' + p.fondo + ' cm</span></div>' +
+            '<button>Ver en 3D</button></div>';
         }).join('');
+        list.querySelectorAll('.cat-item button').forEach(function (btn, i) {
+          btn.addEventListener('click', function () {
+            var arOverlay = overlay.getRootNode().querySelector('.overlay:not(#' + overlay.id + ')') || null;
+          });
+        });
+        // conectar cada item con el visor AR (buscamos el overlay hermano dentro del mismo shadow root)
+        var root = overlay.getRootNode();
+        var arOverlay = Array.prototype.filter.call(root.querySelectorAll('.overlay'), function (o) { return o !== overlay; })[0];
         list.querySelectorAll('.cat-item').forEach(function (item, i) {
           item.querySelector('button').addEventListener('click', function () {
             overlay.classList.remove('open');
