@@ -45,6 +45,16 @@
   function fetchProduct(productId) {
     var url = SUPABASE_URL + '/rest/v1/products?id=eq.' + encodeURIComponent(productId) +
       '&status=eq.published&select=id,name,price,alto,ancho,fondo,model_url';
+    return fetchFromSupabase(url);
+  }
+
+  function fetchProductBySlug(slug) {
+    var url = SUPABASE_URL + '/rest/v1/products?slug=eq.' + encodeURIComponent(slug) +
+      '&status=eq.published&select=id,name,price,alto,ancho,fondo,model_url';
+    return fetchFromSupabase(url);
+  }
+
+  function fetchFromSupabase(url) {
     return fetch(url, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
@@ -61,6 +71,13 @@
         }
         return rows[0];
       });
+  }
+
+  // Deriva un slug candidato del último segmento de la URL actual.
+  // Ej: https://sitio.com/productos/sillon-estocolmo -> "sillon-estocolmo"
+  function slugFromUrl() {
+    var parts = window.location.pathname.split('/').filter(Boolean);
+    return parts.length ? decodeURIComponent(parts[parts.length - 1]) : null;
   }
 
   function buildWidget(container, product) {
@@ -121,7 +138,7 @@
         '  <div class="ebn-frame">' +
         '    <model-viewer src="' + escapeAttr(product.model_url) + '" camera-controls auto-rotate' +
         '      shadow-intensity="1" exposure="0.95" environment-image="neutral"' +
-        '      camera-orbit="35deg 78deg 2.6m" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed">' +
+        '      camera-orbit="35deg 78deg 2.6m" ar ar-modes="webxr scene-viewer quick-look">' +
         '      <button slot="ar-button" class="ebn-ar-btn">Ver en tu espacio (AR)</button>' +
         '    </model-viewer>' +
         '  </div>' +
@@ -148,22 +165,45 @@
     return escapeHtml(str);
   }
 
+  function showError(container, message) {
+    container.innerHTML =
+      '<div style="font-family:sans-serif;font-size:12px;color:#8C3B2E;">' +
+      'Reality AR: ' + escapeHtml(message) + '</div>';
+    console.error('[Reality widget]', message);
+  }
+
   function init() {
-    var containers = document.querySelectorAll('[data-ebano-product]');
-    containers.forEach(function (container) {
+    // Modo manual (compatibilidad con instalaciones anteriores):
+    // <div data-ebano-product="UUID-o-slug"></div>
+    var manual = document.querySelectorAll('[data-ebano-product]');
+    manual.forEach(function (container) {
       var productId = container.getAttribute('data-ebano-product');
       if (!productId) return;
       fetchProduct(productId)
-        .then(function (product) {
-          buildWidget(container, product);
-        })
-        .catch(function (err) {
-          container.innerHTML =
-            '<div style="font-family:sans-serif;font-size:12px;color:#8C3B2E;">' +
-            'Ébano AR: no se pudo cargar el producto (' + escapeHtml(err.message) + ')</div>';
-          console.error('[Ébano widget]', err);
-        });
+        .then(function (product) { buildWidget(container, product); })
+        .catch(function (err) { showError(container, err.message); });
     });
+
+    // Modo automático (instalación única en la plantilla del sitio):
+    // <div data-ebano-auto></div>
+    // Detecta el producto solo, leyendo el slug de la URL actual.
+    var auto = document.querySelectorAll('[data-ebano-auto]');
+    if (auto.length) {
+      var slug = slugFromUrl();
+      if (!slug) {
+        auto.forEach(function (c) { showError(c, 'no se pudo detectar el producto en esta URL'); });
+        return;
+      }
+      auto.forEach(function (container) {
+        fetchProductBySlug(slug)
+          .then(function (product) { buildWidget(container, product); })
+          .catch(function () {
+            // Si no hay producto para este slug, no mostramos error visible:
+            // simplemente esta página no tiene un producto cargado en Reality todavía.
+            container.style.display = 'none';
+          });
+      });
+    }
   }
 
   if (document.readyState === 'loading') {
