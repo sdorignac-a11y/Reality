@@ -555,9 +555,8 @@
 
       '.cat-item{',
       '  display:flex;',
-      '  justify-content:space-between;',
-      '  align-items:center;',
-      '  gap:12px;',
+      '  flex-direction:column;',
+      '  gap:10px;',
       '  border:1px solid #E0CDB0;',
       '  border-radius:14px;',
       '  padding:12px 14px;',
@@ -589,16 +588,89 @@
       '  line-height:1.35;',
       '}',
 
-      '.cat-item button{',
-      '  background:#6B4A32;',
-      '  color:#FFF7ED;',
+      '.cat-actions{',
+      '  display:flex;',
+      '  gap:8px;',
+      '}',
+
+      '.cat-actions button{',
+      '  flex:1;',
+      '  display:flex;',
+      '  align-items:center;',
+      '  justify-content:center;',
+      '  gap:6px;',
       '  border:none;',
-      '  padding:8px 13px;',
+      '  padding:9px 10px;',
       '  border-radius:999px;',
-      '  font-size:12px;',
+      '  font-size:11.5px;',
       '  font-weight:800;',
       '  cursor:pointer;',
       '  white-space:nowrap;',
+      '}',
+
+      '.cat-actions button:disabled{',
+      '  opacity:.6;',
+      '  cursor:default;',
+      '}',
+
+      '.cat-btn-3d{',
+      '  background:#6B4A32;',
+      '  color:#FFF7ED;',
+      '}',
+
+      '.cat-btn-gen{',
+      '  background:#FFFFFF;',
+      '  color:#6B4A32;',
+      '  border:1.5px solid #DCC8A9 !important;',
+      '}',
+
+      '.cat-btn-gen .line-icon{',
+      '  width:13px;',
+      '  height:13px;',
+      '}',
+
+      '.result-frame{',
+      '  width:100%;',
+      '  min-height:320px;',
+      '  background:#FFFFFF;',
+      '  border:1px solid rgba(218,196,165,.75);',
+      '  border-radius:16px;',
+      '  overflow:hidden;',
+      '  margin-bottom:10px;',
+      '  display:flex;',
+      '  align-items:center;',
+      '  justify-content:center;',
+      '}',
+
+      '.result-frame img{',
+      '  width:100%;',
+      '  height:100%;',
+      '  object-fit:contain;',
+      '  display:block;',
+      '}',
+
+      '.result-loading{',
+      '  display:flex;',
+      '  flex-direction:column;',
+      '  align-items:center;',
+      '  gap:10px;',
+      '  color:#8a7b68;',
+      '  font-size:13px;',
+      '  font-weight:700;',
+      '  padding:40px 20px;',
+      '  text-align:center;',
+      '}',
+
+      '.result-loading .line-icon{',
+      '  width:26px;',
+      '  height:26px;',
+      '  color:#A8632C;',
+      '  animation:spin 1.4s linear infinite;',
+      '}',
+
+      '@keyframes spin{',
+      '  from{transform:rotate(0deg);}',
+      '  to{transform:rotate(360deg);}',
       '}',
 
       '.empty{',
@@ -683,7 +755,8 @@
     });
 
     var arOverlay = buildAROverlay(root);
-    var catalogOverlay = buildCatalogOverlay(root, arOverlay);
+    var resultOverlay = buildResultOverlay(root);
+    var catalogOverlay = buildCatalogOverlay(root, arOverlay, resultOverlay);
 
     if (currentProduct && menu.querySelector('#opt3d')) {
       menu.querySelector('#opt3d').addEventListener('click', function () {
@@ -740,7 +813,37 @@
     });
   }
 
-  function buildCatalogOverlay(root, arOverlay) {
+  function buildResultOverlay(root) {
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+
+    overlay.innerHTML =
+      '<div class="modal">' +
+      '  <div class="modal-top">' +
+      '    <strong>Así podría quedar</strong>' +
+      '    <button class="close" aria-label="Cerrar">×</button>' +
+      '  </div>' +
+      '  <div class="result-frame" id="resultFrame">' +
+      '    <div class="result-loading" id="resultLoading">' + sparkIcon() + '<span>Generando la imagen…</span></div>' +
+      '    <img id="resultImage" style="display:none;">' +
+      '  </div>' +
+      '  <p class="hint">Imagen generada por IA a partir de tu foto — es una interpretación, no una medición exacta como el AR.</p>' +
+      '  <div class="poweredby">powered by reality</div>' +
+      '</div>';
+
+    root.appendChild(overlay);
+
+    overlay.querySelector('.close').addEventListener('click', function () {
+      overlay.classList.remove('open');
+    });
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.classList.remove('open');
+    });
+
+    return overlay;
+  }
+
+  function buildCatalogOverlay(root, arOverlay, resultOverlay) {
     var overlay = document.createElement('div');
     overlay.className = 'overlay';
 
@@ -792,6 +895,7 @@
         placeholder.style.display = 'none';
         uploadedBase64 = ev.target.result.split(',')[1];
         uploadedMediaType = file.type;
+        overlay._uploadedPhoto = { base64: uploadedBase64, mediaType: uploadedMediaType };
         analyzeBtn.classList.add('show');
         recBanner.classList.remove('show');
       };
@@ -833,7 +937,7 @@
 
           recBanner.textContent = '✦ Encontramos ' + data.recommendations.length + ' mueble(s) que podrían quedar bien acá';
           recBanner.classList.add('show');
-          renderCatalogList(list, products, overlay._arOverlay, data.recommendations);
+          renderCatalogList(list, products, overlay, data.recommendations);
         })
         .catch(function () {
           analyzeBtn.disabled = false;
@@ -853,11 +957,15 @@
 
     overlay._loaded = false;
     overlay._arOverlay = arOverlay;
+    overlay._resultOverlay = resultOverlay;
+    overlay._root = root;
+    overlay._uploadedPhoto = null;
 
     return overlay;
   }
 
-  function renderCatalogList(list, products, arOverlay, recommendations) {
+  function renderCatalogList(list, products, overlay, recommendations) {
+    var arOverlay = overlay._arOverlay;
     var recMap = {};
     (recommendations || []).forEach(function (r) { recMap[r.id] = r.reason; });
 
@@ -875,16 +983,112 @@
         '    <span>' + escapeHtml(p.price) + ' · ' + p.alto + '×' + p.ancho + '×' + p.fondo + ' cm</span>' +
         (isRec ? '    <div class="reason">' + escapeHtml(recMap[p.id]) + '</div>' : '') +
         '  </div>' +
-        '  <button>Ver en 3D</button>' +
+        '  <div class="cat-actions">' +
+        '    <button class="cat-btn-3d">Ver en 3D</button>' +
+        '    <button class="cat-btn-gen">' + sparkIcon() + ' Generar imagen</button>' +
+        '  </div>' +
         '</div>'
       );
     }).join('');
 
     list.querySelectorAll('.cat-item').forEach(function (item, i) {
-      item.querySelector('button').addEventListener('click', function () {
+      item.querySelector('.cat-btn-3d').addEventListener('click', function () {
         openAR(arOverlay, sorted[i]);
       });
+      item.querySelector('.cat-btn-gen').addEventListener('click', function (e) {
+        generateComposite(overlay, sorted[i], e.currentTarget);
+      });
     });
+  }
+
+  function generateComposite(overlay, product, buttonEl) {
+    if (!overlay._uploadedPhoto) {
+      var recBanner = overlay.querySelector('#recBanner');
+      recBanner.textContent = 'Antes subí una foto de tu ambiente, arriba de todo.';
+      recBanner.classList.add('show');
+      return;
+    }
+
+    var originalLabel = buttonEl.innerHTML;
+    buttonEl.disabled = true;
+    buttonEl.textContent = 'Preparando…';
+
+    ensureModelViewer().then(function () {
+      var snap = document.createElement('model-viewer');
+      snap.setAttribute('src', product.model_url);
+      snap.setAttribute('exposure', '1');
+      snap.setAttribute('environment-image', 'neutral');
+      snap.setAttribute('camera-orbit', '35deg 75deg auto');
+      snap.setAttribute('shadow-intensity', '0');
+      snap.style.cssText = 'position:fixed;left:-9999px;top:0;width:640px;height:640px;background:#fff;';
+      overlay._root.appendChild(snap);
+
+      var settled = false;
+      function cleanupAndCapture() {
+        if (settled) return;
+        settled = true;
+        snap.toBlob({ mimeType: 'image/png', idealAspect: true }).then(function (blob) {
+          var reader = new FileReader();
+          reader.onload = function (ev) {
+            snap.remove();
+            var productBase64 = ev.target.result.split(',')[1];
+            callGenerateApi(overlay, product, productBase64, buttonEl, originalLabel);
+          };
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      snap.addEventListener('load', function () { setTimeout(cleanupAndCapture, 350); });
+      setTimeout(cleanupAndCapture, 4000); // por si el evento load no llega
+    });
+  }
+
+  function callGenerateApi(overlay, product, productBase64, buttonEl, originalLabel) {
+    buttonEl.textContent = 'Generando imagen…';
+
+    fetch(SITE_DOMAIN + '/api/generate-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomImageBase64: overlay._uploadedPhoto.base64,
+        roomImageMediaType: overlay._uploadedPhoto.mediaType,
+        productImageBase64: productBase64,
+        productImageMediaType: 'image/png',
+        productName: product.name,
+        alto: product.alto,
+        ancho: product.ancho,
+        fondo: product.fondo,
+      }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        buttonEl.disabled = false;
+        buttonEl.innerHTML = originalLabel;
+
+        var resultOverlay = overlay._resultOverlay;
+        var loading = resultOverlay.querySelector('#resultLoading');
+        var img = resultOverlay.querySelector('#resultImage');
+
+        if (data.error || !data.imageBase64) {
+          loading.querySelector('span').textContent = 'No se pudo generar la imagen ahora. Probá de nuevo en un rato.';
+          img.style.display = 'none';
+          loading.style.display = 'flex';
+        } else {
+          img.src = 'data:image/png;base64,' + data.imageBase64;
+          img.style.display = 'block';
+          loading.style.display = 'none';
+        }
+        resultOverlay.classList.add('open');
+      })
+      .catch(function () {
+        buttonEl.disabled = false;
+        buttonEl.innerHTML = originalLabel;
+        var resultOverlay = overlay._resultOverlay;
+        resultOverlay.querySelector('#resultLoading span').textContent = 'No se pudo generar la imagen ahora. Probá de nuevo en un rato.';
+        resultOverlay.querySelector('#resultImage').style.display = 'none';
+        resultOverlay.querySelector('#resultLoading').style.display = 'flex';
+        resultOverlay.classList.add('open');
+      });
   }
 
   function openCatalog(overlay) {
@@ -905,7 +1109,7 @@
           return;
         }
 
-        renderCatalogList(list, products, overlay._arOverlay, []);
+        renderCatalogList(list, products, overlay, []);
       })
       .catch(function () {
         list.innerHTML = '<div class="empty">No se pudo cargar el catálogo.</div>';
