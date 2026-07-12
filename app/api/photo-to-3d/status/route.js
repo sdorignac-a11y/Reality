@@ -7,8 +7,15 @@
 
 const MODEL_ID = 'tripo3d/h3.1/multiview-to-3d';
 
+import { verifySupabaseUser } from '../../../../lib/rateLimit';
+
 export async function GET(req) {
   try {
+    const user = await verifySupabaseUser(req.headers.get('authorization'));
+    if (!user) {
+      return cors(json({ error: 'Necesitás estar logueado.' }, 401));
+    }
+
     const { searchParams } = new URL(req.url);
     const requestId = searchParams.get('request_id');
 
