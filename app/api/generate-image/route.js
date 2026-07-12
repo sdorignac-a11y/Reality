@@ -13,8 +13,18 @@
 // Necesita la misma variable de entorno que /api/recommend:
 // OPENAI_API_KEY  (Vercel → Settings → Environment Variables)
 
+import { checkRateLimit, getClientIp } from '../../../lib/rateLimit';
+
 export async function POST(req) {
   try {
+    const ip = getClientIp(req);
+    const { blocked } = await checkRateLimit('generate-image:' + ip, 5, 10);
+    if (blocked) {
+      return cors(
+        json({ error: 'Demasiadas generaciones seguidas. Probá de nuevo en unos minutos.' }, 429)
+      );
+    }
+
     const {
       roomImageBase64,
       roomImageMediaType,
