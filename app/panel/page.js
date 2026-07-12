@@ -285,6 +285,8 @@ export default function ProductosPage() {
     setGeneratedModelUrl(null);
     setGenerationStatus('Subiendo fotos…');
 
+    const uploadedPaths = [];
+
     try {
       const userFolder = user?.id || 'public';
       const imageUrls = [];
@@ -296,6 +298,11 @@ export default function ProductosPage() {
           .upload(path, photo, { cacheControl: '3600', upsert: false });
 
         if (uploadError) throw uploadError;
+
+        uploadedPaths.push(path);
+        // La anotamos en la "lista de pendientes de borrar" — si algo falla
+        // a mitad de camino, la limpieza diaria la va a encontrar igual.
+        supabase.from('pending_photo_cleanup').insert({ path }).then(() => {});
 
         const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
         imageUrls.push(data.publicUrl);
@@ -333,6 +340,7 @@ export default function ProductosPage() {
             setGenerating(false);
             setGenerationStatus('');
             showToast('No se pudo generar el modelo', statusData.error, 'error');
+            cleanupPhotos(uploadedPaths);
             return;
           }
 
@@ -343,6 +351,8 @@ export default function ProductosPage() {
             setGenerationStatus('');
             setGeneratedModelUrl(statusData.modelUrl);
             showToast('Modelo generado', 'El modelo 3D está listo — ya podés guardar el producto.');
+            // Ya generamos el modelo, no necesitamos más las fotos originales
+            cleanupPhotos(uploadedPaths);
           }
         } catch {
           // seguimos intentando en el próximo intervalo
@@ -356,7 +366,14 @@ export default function ProductosPage() {
         error?.message || 'Intentá nuevamente.',
         'error'
       );
+      cleanupPhotos(uploadedPaths);
     }
+  }
+
+  function cleanupPhotos(paths) {
+    if (!paths.length) return;
+    supabase.storage.from(STORAGE_BUCKET).remove(paths).catch(() => {});
+    supabase.from('pending_photo_cleanup').delete().in('path', paths).then(() => {});
   }
 
   async function handleSubmit(event) {
