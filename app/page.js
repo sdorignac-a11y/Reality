@@ -1,9 +1,32 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import Script from 'next/script';
+import { supabase } from '../lib/supabaseClient';
 
 export default function HomePage() {
+  const [products, setProducts] = useState([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selected = products[selectedIndex] || null;
+
+  // Traer el catálogo real publicado
+  useEffect(() => {
+    supabase
+      .from('products')
+      .select('*')
+      .eq('status', 'published')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setProducts(data);
+      });
+  }, []);
+
+  // Re-generar íconos cada vez que aparece contenido nuevo en el DOM
+  useEffect(() => {
+    if (window.lucide) window.lucide.createIcons();
+  }, [products, selectedIndex]);
+
   useEffect(() => {
     document.title = 'Reality — Probá los muebles en tu casa';
 
@@ -42,133 +65,6 @@ export default function HomePage() {
     );
     document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
 
-    const swatches = document.querySelectorAll('.swatch');
-    function handleSwatchClick(swatch) {
-      swatches.forEach((item) => item.classList.remove('active'));
-      swatch.classList.add('active');
-      document.documentElement.style.setProperty('--chair-color', swatch.dataset.color);
-    }
-    swatches.forEach((swatch) => swatch.addEventListener('click', () => handleSwatchClick(swatch)));
-
-    const stage = document.getElementById('arStage');
-    const chair = document.getElementById('chair');
-    let dragging = false;
-    let startPointerX = 0;
-    let startPointerY = 0;
-    let currentX = 0;
-    let currentY = 0;
-    let originX = 0;
-    let originY = 0;
-    let chairScale = 1;
-
-    function updateChairTransform() {
-      chair.style.transform = `translate(calc(-50% + ${currentX}px), ${currentY}px) scale(${chairScale})`;
-    }
-
-    function handlePointerDown(event) {
-      dragging = true;
-      startPointerX = event.clientX;
-      startPointerY = event.clientY;
-      originX = currentX;
-      originY = currentY;
-      chair.setPointerCapture(event.pointerId);
-    }
-
-    function handlePointerMove(event) {
-      if (!dragging) return;
-      const stageRect = stage.getBoundingClientRect();
-      const chairRect = chair.getBoundingClientRect();
-      const nextX = originX + (event.clientX - startPointerX);
-      const nextY = originY + (event.clientY - startPointerY);
-      const horizontalLimit = Math.max(0, stageRect.width / 2 - chairRect.width / 2 - 14);
-      currentX = Math.min(horizontalLimit, Math.max(-horizontalLimit, nextX));
-      currentY = Math.min(20, Math.max(-150, nextY));
-      updateChairTransform();
-    }
-
-    function stopDragging(event) {
-      if (!dragging) return;
-      dragging = false;
-      if (event?.pointerId !== undefined && chair.hasPointerCapture(event.pointerId)) {
-        chair.releasePointerCapture(event.pointerId);
-      }
-    }
-
-    chair.addEventListener('pointerdown', handlePointerDown);
-    chair.addEventListener('pointermove', handlePointerMove);
-    chair.addEventListener('pointerup', stopDragging);
-    chair.addEventListener('pointercancel', stopDragging);
-
-    const scaleDownButton = document.getElementById('scaleDownButton');
-    const scaleUpButton = document.getElementById('scaleUpButton');
-    const resetChairButton = document.getElementById('resetChairButton');
-    const captureButton = document.getElementById('captureButton');
-    const helpButton = document.getElementById('helpButton');
-
-    function handleScaleDown() {
-      chairScale = Math.max(0.82, Number((chairScale - 0.06).toFixed(2)));
-      updateChairTransform();
-      showToast('Escala simulada', 'En producción la escala queda bloqueada con las medidas reales.');
-    }
-    function handleScaleUp() {
-      chairScale = Math.min(1.18, Number((chairScale + 0.06).toFixed(2)));
-      updateChairTransform();
-      showToast('Escala simulada', 'En producción la escala queda bloqueada con las medidas reales.');
-    }
-    function handleReset() {
-      currentX = 0;
-      currentY = 0;
-      chairScale = 1;
-      updateChairTransform();
-      showToast('Posición reiniciada', 'El sillón volvió al centro de la habitación.');
-    }
-    function handleCapture() {
-      showToast('Captura guardada', 'La imagen quedó lista para compartir o comparar.');
-    }
-    function handleHelp() {
-      showToast('Cómo usar la demo', 'Arrastrá el sillón, cambiá el color y probá los controles inferiores.');
-    }
-
-    scaleDownButton.addEventListener('click', handleScaleDown);
-    scaleUpButton.addEventListener('click', handleScaleUp);
-    resetChairButton.addEventListener('click', handleReset);
-    captureButton.addEventListener('click', handleCapture);
-    helpButton.addEventListener('click', handleHelp);
-
-    const demoModal = document.getElementById('demoModal');
-    const openDemoButton = document.getElementById('openDemoButton');
-    const viewInSpaceButton = document.getElementById('viewInSpaceButton');
-    const closeModalButton = document.getElementById('closeModalButton');
-
-    function openModal() {
-      demoModal.classList.add('open');
-      document.body.style.overflow = 'hidden';
-      closeModalButton.focus();
-    }
-    function closeModal() {
-      demoModal.classList.remove('open');
-      document.body.style.overflow = '';
-    }
-    function handleModalOverlayClick(event) {
-      if (event.target === demoModal) closeModal();
-    }
-    function handleEscape(event) {
-      if (event.key === 'Escape' && demoModal.classList.contains('open')) closeModal();
-    }
-
-    openDemoButton.addEventListener('click', openModal);
-    viewInSpaceButton.addEventListener('click', openModal);
-    closeModalButton.addEventListener('click', closeModal);
-    demoModal.addEventListener('click', handleModalOverlayClick);
-    document.addEventListener('keydown', handleEscape);
-
-    const simulateARButton = document.getElementById('simulateARButton');
-    function handleSimulateAR() {
-      closeModal();
-      showToast('Demo iniciada', 'En un celular compatible se abriría la cámara del navegador.');
-    }
-    simulateARButton.addEventListener('click', handleSimulateAR);
-
     const pilotForm = document.getElementById('pilotForm');
     function handlePilotSubmit(event) {
       event.preventDefault();
@@ -195,11 +91,6 @@ export default function HomePage() {
     return () => {
       menuButton.removeEventListener('click', handleMenuClick);
       navLinkEls.forEach((link) => link.removeEventListener('click', closeMenu));
-      chair.removeEventListener('pointerdown', handlePointerDown);
-      chair.removeEventListener('pointermove', handlePointerMove);
-      chair.removeEventListener('pointerup', stopDragging);
-      chair.removeEventListener('pointercancel', stopDragging);
-      document.removeEventListener('keydown', handleEscape);
     };
   }, []);
 
@@ -228,19 +119,12 @@ export default function HomePage() {
           --text: #4b6086;
           --muted: #7384a2;
           --white: #ffffff;
-          --surface: rgba(255, 255, 255, 0.84);
-          --surface-soft: rgba(247, 251, 255, 0.92);
           --danger: #ff6a7a;
-          --success: #1e73e8;
           --shadow-sm: 0 8px 24px rgba(40, 92, 175, 0.08);
           --shadow-md: 0 18px 48px rgba(40, 92, 175, 0.12);
           --shadow-lg: 0 30px 80px rgba(29, 82, 168, 0.17);
-          --radius-sm: 14px;
-          --radius-md: 22px;
-          --radius-lg: 30px;
           --radius-xl: 38px;
           --container: min(1040px, calc(100% - 32px));
-          --chair-color: #5f9ae8;
         }
         * { box-sizing: border-box; }
         html { scroll-behavior: smooth; scroll-padding-top: 100px; }
@@ -353,12 +237,13 @@ export default function HomePage() {
           color: var(--blue-700); font-size: 0.74rem; font-weight: 900; box-shadow: var(--shadow-sm); backdrop-filter: blur(14px);
         }
         .micro-pill i { width: 14px; height: 14px; }
-        .hero-furniture {
-          position: absolute; z-index: 1; bottom: 50px; width: min(22vw, 270px);
-          pointer-events: none; filter: drop-shadow(0 22px 24px rgba(35, 68, 120, 0.16));
-        }
-        .hero-chair { left: -10px; transform: rotate(-1deg); }
-        .hero-sofa { right: -20px; width: min(27vw, 340px); transform: rotate(1deg); }
+
+        /* Íconos grandes decorativos del hero (reemplazan las ilustraciones dibujadas a mano) */
+        .hero-furniture-icon { position: absolute; z-index: 1; pointer-events: none; color: var(--blue-300); opacity: 0.55; }
+        .hero-furniture-icon svg { width: 100%; height: 100%; stroke-width: 1; }
+        .hero-chair-icon { left: 0; bottom: 30px; width: 130px; height: 130px; animation: float 5.5s ease-in-out infinite; }
+        .hero-sofa-icon { right: 0; bottom: 30px; width: 170px; height: 170px; animation: float 5.5s ease-in-out infinite; animation-delay: -2.2s; transform: scaleX(-1); }
+
         .orbit { position: absolute; z-index: 2; width: 95px; height: 95px; border: 2px dashed rgba(45, 124, 242, 0.55); border-radius: 50%; pointer-events: none; }
         .orbit-left { left: 5%; bottom: 190px; border-right-color: transparent; border-bottom-color: transparent; transform: rotate(10deg); }
         .orbit-right { right: 8%; bottom: 160px; border-left-color: transparent; border-bottom-color: transparent; transform: rotate(-12deg); }
@@ -399,36 +284,32 @@ export default function HomePage() {
         .demo-note { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; padding: 11px; border: 1px solid rgba(44, 119, 231, 0.1); border-radius: 14px; background: rgba(255, 255, 255, 0.68); font-size: 0.78rem; box-shadow: var(--shadow-sm); }
         .demo-note i { width: 16px; height: 16px; color: var(--blue-700); flex: 0 0 auto; }
         .widget { overflow: hidden; display: grid; grid-template-columns: 230px 1fr; min-height: 400px; border: 6px solid rgba(255, 255, 255, 0.95); border-radius: 24px; background: var(--white); box-shadow: var(--shadow-lg); }
-        .product-panel { position: relative; z-index: 4; padding: 18px 16px; border-right: 1px solid rgba(26, 91, 184, 0.09); background: rgba(255, 255, 255, 0.98); }
-        .product-panel h3 { margin-bottom: 3px; font-size: 1.24rem; font-weight: 800; }
-        .price { margin-bottom: 12px; color: var(--navy); font-size: 0.92rem; font-weight: 900; }
-        .label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 0.7rem; font-weight: 900; }
-        .swatches { display: flex; gap: 7px; margin-bottom: 16px; }
-        .swatch { width: 24px; height: 24px; padding: 0; border: 3px solid white; border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 1px rgba(23, 73, 143, 0.12), var(--shadow-sm); transition: transform 0.2s ease, box-shadow 0.2s ease; }
-        .swatch:hover, .swatch.active { transform: scale(1.1); box-shadow: 0 0 0 2px var(--blue-600), var(--shadow-sm); }
-        .measurements { display: grid; gap: 8px; margin-bottom: 16px; }
+        .product-panel { position: relative; z-index: 4; padding: 18px 16px; border-right: 1px solid rgba(26, 91, 184, 0.09); background: rgba(255, 255, 255, 0.98); display: flex; flex-direction: column; }
+        .label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
+        .product-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; overflow-y: auto; max-height: 210px; }
+        .product-list-item {
+          display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+          padding: 9px 10px; border: 1px solid rgba(23, 73, 143, 0.1); border-radius: 11px;
+          background: var(--white); cursor: pointer; text-align: left; transition: border-color 0.15s ease, background 0.15s ease;
+        }
+        .product-list-item strong { font-size: 0.82rem; color: var(--navy); }
+        .product-list-item span { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
+        .product-list-item.active { border-color: var(--blue-600); background: var(--blue-50); }
+        .product-list-item:hover { border-color: var(--blue-500); }
+        .empty-note { font-size: 0.8rem; color: var(--muted); text-align: center; padding: 10px 4px; }
+        .measurements { display: grid; gap: 8px; margin-bottom: 16px; margin-top: auto; }
         .measure { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #5d6f8c; font-size: 0.76rem; font-weight: 800; }
         .measure span:first-child { display: flex; align-items: center; gap: 5px; }
         .measure i { width: 14px; height: 14px; color: var(--blue-700); }
-        .product-panel .btn { width: 100%; }
-        .powered-by { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 10px; color: #8a99b0; font-size: 0.66rem; font-weight: 800; }
+        .powered-by { display: flex; align-items: center; justify-content: center; gap: 5px; color: #8a99b0; font-size: 0.66rem; font-weight: 800; }
         .powered-by strong { color: var(--blue-700); }
-        .ar-stage { position: relative; overflow: hidden; min-height: 400px; background: linear-gradient(rgba(20, 51, 104, 0.03), rgba(20, 51, 104, 0.03)), url("https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=90") center / cover no-repeat; touch-action: none; user-select: none; }
-        .ar-stage::after { content: ""; position: absolute; inset: auto 0 0; height: 44%; background: linear-gradient(to top, rgba(15, 40, 79, 0.14), transparent); pointer-events: none; }
-        .top-control { position: absolute; z-index: 5; top: 13px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; color: var(--navy); background: rgba(255, 255, 255, 0.92); box-shadow: var(--shadow-sm); cursor: pointer; }
-        .top-control:first-of-type { left: 13px; }
-        .top-control.help { right: 13px; }
-        .top-control i { width: 15px; height: 15px; }
+        .ar-stage { position: relative; overflow: hidden; min-height: 400px; background: #fafcff; }
+        .ar-real-btn {
+          background: var(--blue-600); color: #fff; border: none; padding: 10px 16px;
+          border-radius: 999px; font-size: 0.8rem; font-weight: 800; cursor: pointer;
+        }
         .lock-pill { position: absolute; z-index: 6; top: 13px; left: 50%; display: flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); color: var(--blue-700); font-size: 0.66rem; font-weight: 900; box-shadow: var(--shadow-sm); transform: translateX(-50%); }
         .lock-pill i { width: 11px; height: 11px; }
-        .chair-wrap { position: absolute; z-index: 3; left: 50%; bottom: 46px; width: min(52%, 250px); cursor: grab; filter: drop-shadow(0 24px 20px rgba(20, 45, 84, 0.31)); transform: translateX(-50%); }
-        .chair-wrap:active { cursor: grabbing; }
-        .chair-svg .chair-color { fill: var(--chair-color); transition: fill 0.25s ease; }
-        .chair-svg .chair-shadow { fill: rgba(0, 0, 0, 0.12); }
-        .demo-controls { position: absolute; z-index: 7; right: 0; bottom: 12px; left: 0; display: flex; align-items: center; justify-content: center; gap: 14px; }
-        .circle-control { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; color: var(--blue-700); background: rgba(255, 255, 255, 0.9); box-shadow: var(--shadow-md); cursor: pointer; }
-        .capture-control { width: 58px; height: 58px; border: 4px solid var(--white); border-radius: 50%; background: rgba(255, 255, 255, 0.28); box-shadow: 0 0 0 2px rgba(22, 61, 120, 0.36), var(--shadow-md); cursor: pointer; }
-        .drag-tip { position: absolute; z-index: 7; right: 14px; bottom: 28%; max-width: 92px; padding: 7px 9px; border-radius: 11px; background: rgba(255, 255, 255, 0.9); color: var(--blue-700); font-size: 0.66rem; font-weight: 900; box-shadow: var(--shadow-sm); transform: rotate(-3deg); }
         .benefits-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
         .benefit-card { min-height: 185px; padding: 20px 16px; border: 1px solid rgba(37, 111, 222, 0.1); border-radius: 18px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 250, 255, 0.94)); text-align: center; box-shadow: var(--shadow-sm); transition: transform 0.2s ease, box-shadow 0.2s ease; }
         .benefit-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); }
@@ -459,16 +340,6 @@ export default function HomePage() {
         footer { padding: 24px 0 34px; }
         .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 0.84rem; }
         .footer-mini { display: flex; gap: 20px; font-weight: 800; }
-        .modal { position: fixed; z-index: 2000; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(13, 35, 72, 0.54); backdrop-filter: blur(10px); opacity: 0; visibility: hidden; transition: opacity 0.22s ease, visibility 0.22s ease; }
-        .modal.open { opacity: 1; visibility: visible; }
-        .modal-card { position: relative; width: min(460px, 100%); padding: 28px; border-radius: 28px; background: var(--white); box-shadow: var(--shadow-lg); text-align: center; transform: translateY(12px) scale(0.98); transition: transform 0.22s ease; }
-        .modal.open .modal-card { transform: translateY(0) scale(1); }
-        .modal-close { position: absolute; top: 14px; right: 14px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; color: var(--navy); background: var(--blue-100); cursor: pointer; }
-        .modal-icon { width: 74px; height: 74px; display: grid; place-items: center; margin: 0 auto 18px; border-radius: 24px; color: var(--blue-700); background: var(--blue-100); }
-        .modal-icon i { width: 38px; height: 38px; }
-        .modal-card h3 { margin-bottom: 10px; font-size: 2rem; }
-        .modal-card p { margin-bottom: 20px; color: var(--muted); }
-        .qr-fake { width: 176px; height: 176px; margin: 0 auto 18px; padding: 12px; border: 8px solid var(--blue-100); border-radius: 22px; background: linear-gradient(90deg, var(--navy) 10px, transparent 10px) 0 0/30px 30px, linear-gradient(var(--navy) 10px, transparent 10px) 0 0/30px 30px, linear-gradient(90deg, transparent 20px, var(--navy) 20px 30px, transparent 30px) 5px 8px/44px 44px, white; box-shadow: inset 0 0 0 2px rgba(20, 60, 130, 0.08); }
         .toast { position: fixed; z-index: 3000; right: 24px; bottom: 24px; max-width: min(380px, calc(100% - 48px)); display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; border: 1px solid rgba(45, 124, 242, 0.14); border-radius: 18px; background: rgba(255, 255, 255, 0.95); box-shadow: var(--shadow-lg); backdrop-filter: blur(12px); opacity: 0; transform: translateY(16px); pointer-events: none; transition: opacity 0.22s ease, transform 0.22s ease; }
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast i { width: 22px; height: 22px; color: var(--blue-700); flex: 0 0 auto; }
@@ -477,18 +348,16 @@ export default function HomePage() {
         .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.65s ease, transform 0.65s ease; }
         .reveal.visible { opacity: 1; transform: translateY(0); }
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        .hero-chair, .hero-sofa { animation: float 5.5s ease-in-out infinite; }
-        .hero-sofa { animation-delay: -2.2s; }
+
         @media (max-width: 1020px) {
           .nav-links { gap: 18px; }
-          .hero { min-height: 720px; }
-          .hero-furniture { opacity: 0.52; }
+          .hero { min-height: 480px; }
+          .hero-furniture-icon { opacity: 0.35; }
           .comparison-top { grid-template-columns: 1fr; }
-          .comparison-image { height: 200px; }
+          .comparison-image { height: 170px; }
           .demo-layout { grid-template-columns: 1fr; }
           .demo-intro { text-align: center; }
-          .demo-intro .btn { align-self: center; }
-          .demo-note { max-width: 600px; margin-inline: auto; }
+          .demo-note { max-width: 500px; margin-inline: auto; }
           .benefits-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .cta-card { grid-template-columns: 1fr; }
         }
@@ -500,43 +369,41 @@ export default function HomePage() {
           .nav-links a:hover { background: var(--blue-100); }
           .navbar > .btn { display: none; }
           .menu-button { display: grid; }
-          .hero { min-height: 720px; padding-top: 70px; }
-          .hero-furniture { bottom: 20px; width: 260px; opacity: 0.23; }
-          .hero-sofa { width: 320px; }
+          .hero { padding-top: 60px; }
+          .hero-furniture-icon { bottom: 10px; opacity: 0.2; }
           .comparison-grid, .steps { grid-template-columns: 1fr; }
-          .steps { gap: 38px; }
-          .section-card { padding: 38px 22px; }
+          .steps { gap: 30px; }
+          .section-card { padding: 26px 18px; }
           .widget { grid-template-columns: 1fr; }
           .product-panel { border-right: 0; border-bottom: 1px solid rgba(26, 91, 184, 0.09); }
-          .ar-stage { min-height: 480px; }
-          .cta-card { padding: 38px 26px; }
+          .ar-stage { min-height: 360px; }
+          .cta-card { padding: 28px 20px; }
           .footer-inner { flex-direction: column; text-align: center; }
         }
         @media (max-width: 560px) {
           :root { --container: min(100% - 22px, 1180px); }
-          .section { padding: 62px 0; }
+          .section { padding: 44px 0; }
           .navbar-shell { padding-top: 10px; }
-          .navbar { min-height: 62px; padding: 8px 10px 8px 13px; border-radius: 18px; }
-          .logo-mark { width: 37px; height: 37px; border-radius: 11px; }
-          .brand { font-size: 1.5rem; }
-          .hero { min-height: 690px; padding: 62px 0 90px; }
-          .hero h1 { font-size: clamp(3rem, 14.8vw, 4.2rem); }
+          .navbar { min-height: 54px; padding: 6px 8px 6px 11px; border-radius: 16px; }
+          .logo-mark { width: 30px; height: 30px; border-radius: 9px; }
+          .brand { font-size: 1.14rem; }
+          .hero { min-height: 460px; padding: 46px 0 60px; }
+          .hero h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
           .hero-actions { display: grid; }
-          .hero-actions .btn { width: min(100%, 330px); min-width: 0; }
-          .hero-pills { gap: 7px; }
-          .micro-pill { padding: 9px 10px; font-size: 0.74rem; }
-          .hero-chair { left: -86px; }
-          .hero-sofa { right: -116px; }
-          .comparison-card { min-height: 0; padding: 18px; }
-          .comparison-image { height: 190px; }
+          .hero-actions .btn { width: min(100%, 300px); min-width: 0; }
+          .hero-pills { gap: 6px; }
+          .micro-pill { padding: 7px 9px; font-size: 0.68rem; }
+          .hero-chair-icon { width: 90px; height: 90px; }
+          .hero-sofa-icon { width: 110px; height: 110px; }
+          .comparison-card { min-height: 0; padding: 14px; }
+          .comparison-image { height: 150px; }
           .benefits-grid { grid-template-columns: 1fr; }
-          .widget { border-width: 5px; border-radius: 24px; }
-          .product-panel { padding: 22px 18px; }
-          .ar-stage { min-height: 430px; }
+          .widget { border-width: 4px; border-radius: 20px; }
+          .product-panel { padding: 16px 14px; }
+          .ar-stage { min-height: 320px; }
           .lock-pill { display: none; }
-          .drag-tip { display: none; }
-          .cta-card { border-radius: 26px; }
-          .cta-copy h2 { font-size: 2.7rem; }
+          .cta-card { border-radius: 22px; }
+          .cta-copy h2 { font-size: 2.1rem; }
         }
       `}</style>
 
@@ -554,7 +421,7 @@ export default function HomePage() {
             <a href="#beneficios">Beneficios</a>
           </div>
 
-          <a className="btn btn-primary btn-small" href="#piloto">Quiero ser piloto</a>
+          <Link href="/login" className="btn btn-primary btn-small">Iniciar sesión</Link>
 
           <button className="menu-button" id="menuButton" type="button" aria-label="Abrir menú" aria-expanded="false">
             <i data-lucide="menu"></i>
@@ -567,28 +434,8 @@ export default function HomePage() {
           <div className="orbit orbit-left"></div>
           <div className="orbit orbit-right"></div>
 
-          <svg className="hero-furniture hero-chair" viewBox="0 0 390 360" aria-hidden="true">
-            <ellipse cx="195" cy="324" rx="150" ry="24" fill="rgba(31,67,119,.10)" />
-            <path d="M90 132C90 82 123 48 170 48h50c47 0 80 34 80 84v82H90z" fill="#86b6ed" />
-            <rect x="64" y="175" width="262" height="116" rx="46" fill="#6fa4e6" />
-            <rect x="77" y="190" width="236" height="89" rx="39" fill="#7aade8" />
-            <rect x="54" y="158" width="74" height="142" rx="34" fill="#689be0" />
-            <rect x="262" y="158" width="74" height="142" rx="34" fill="#689be0" />
-            <path d="M94 287h32l-12 60H83zM264 287h32l11 60h-31z" fill="#c6ad87" />
-            <path d="M134 69c20-9 101-9 121 0" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="6" strokeLinecap="round" />
-          </svg>
-
-          <svg className="hero-furniture hero-sofa" viewBox="0 0 520 360" aria-hidden="true">
-            <ellipse cx="260" cy="326" rx="212" ry="24" fill="rgba(31,67,119,.10)" />
-            <rect x="78" y="122" width="364" height="153" rx="48" fill="#d6dbe2" />
-            <rect x="54" y="176" width="412" height="119" rx="42" fill="#c9cfd8" />
-            <rect x="54" y="155" width="83" height="145" rx="34" fill="#c0c7d1" />
-            <rect x="383" y="155" width="83" height="145" rx="34" fill="#c0c7d1" />
-            <rect x="124" y="182" width="130" height="92" rx="25" fill="#dce1e7" />
-            <rect x="266" y="182" width="130" height="92" rx="25" fill="#dce1e7" />
-            <path d="M112 291h32l-7 43h-32zM376 291h32l8 43h-32z" fill="#c3a67f" />
-            <rect x="299" y="140" width="88" height="72" rx="18" fill="#8fbdef" />
-          </svg>
+          <div className="hero-furniture-icon hero-chair-icon"><i data-lucide="armchair"></i></div>
+          <div className="hero-furniture-icon hero-sofa-icon"><i data-lucide="sofa"></i></div>
 
           <div className="container hero-content reveal">
             <div className="eyebrow">
@@ -709,78 +556,71 @@ export default function HomePage() {
           <div className="section-card reveal">
             <div className="demo-layout">
               <div className="demo-intro">
-                <span className="eyebrow"><i data-lucide="sparkles"></i> Probalo en vivo</span>
+                <span className="eyebrow"><i data-lucide="sparkles"></i> Catálogo real</span>
                 <h2>Viendo es creyendo</h2>
-                <p>Cambiá el color del sillón y arrastralo dentro del ambiente. En el celular, el botón abre una simulación del acceso por realidad aumentada.</p>
-
-                <button className="btn btn-primary" id="openDemoButton" type="button">
-                  <i data-lucide="scan-line"></i>
-                  Escanear demo
-                </button>
+                <p>Esto no es una simulación: son los productos reales cargados en la plataforma. Elegí uno de la lista y probalo en 3D.</p>
 
                 <div className="demo-note">
                   <i data-lucide="move"></i>
-                  <span>En la demo podés mover el sillón. En la versión real se ancla al piso y mantiene su escala exacta.</span>
+                  <span>Desde el celular, el botón "Ver en tu espacio" abre la cámara real y ancla el mueble a escala exacta.</span>
                 </div>
               </div>
 
               <div className="widget">
                 <aside className="product-panel">
-                  <h3>Sillón Nórdico</h3>
-                  <div className="price">$ 499.990</div>
-
-                  <span className="label">Colores disponibles</span>
-                  <div className="swatches" role="group" aria-label="Seleccionar color">
-                    <button className="swatch active" style={{ background: '#5f9ae8' }} data-color="#5f9ae8" aria-label="Azul"></button>
-                    <button className="swatch" style={{ background: '#9ba7b6' }} data-color="#9ba7b6" aria-label="Gris"></button>
-                    <button className="swatch" style={{ background: '#d9d1c3' }} data-color="#d9d1c3" aria-label="Beige"></button>
-                    <button className="swatch" style={{ background: '#9bb7a9' }} data-color="#9bb7a9" aria-label="Verde"></button>
+                  <span className="label">Catálogo publicado</span>
+                  <div className="product-list">
+                    {products.length === 0 && (
+                      <div className="empty-note">Todavía no hay productos publicados.</div>
+                    )}
+                    {products.map((p, i) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`product-list-item${i === selectedIndex ? ' active' : ''}`}
+                        onClick={() => setSelectedIndex(i)}
+                      >
+                        <strong>{p.name}</strong>
+                        <span>{p.price}</span>
+                      </button>
+                    ))}
                   </div>
 
-                  <div className="measurements">
-                    <div className="measure"><span><i data-lucide="move-horizontal"></i> Ancho</span><span>80 cm</span></div>
-                    <div className="measure"><span><i data-lucide="move-horizontal"></i> Profundidad</span><span>85 cm</span></div>
-                    <div className="measure"><span><i data-lucide="move-vertical"></i> Alto</span><span>90 cm</span></div>
-                  </div>
-
-                  <button className="btn btn-primary" id="viewInSpaceButton" type="button">
-                    Ver en mi espacio
-                    <i data-lucide="box"></i>
-                  </button>
+                  {selected && (
+                    <div className="measurements">
+                      <div className="measure"><span><i data-lucide="move-horizontal"></i> Ancho</span><span>{selected.ancho} cm</span></div>
+                      <div className="measure"><span><i data-lucide="move-horizontal"></i> Profundidad</span><span>{selected.fondo} cm</span></div>
+                      <div className="measure"><span><i data-lucide="move-vertical"></i> Alto</span><span>{selected.alto} cm</span></div>
+                    </div>
+                  )}
 
                   <div className="powered-by">Con tecnología de <strong>Reality</strong></div>
                 </aside>
 
-                <div className="ar-stage" id="arStage">
-                  <button className="top-control" id="resetChairButton" type="button" aria-label="Reiniciar posición">
-                    <i data-lucide="rotate-ccw"></i>
-                  </button>
-
+                <div className="ar-stage">
                   <span className="lock-pill"><i data-lucide="lock-keyhole"></i> Escala real bloqueada</span>
-
-                  <button className="top-control help" id="helpButton" type="button" aria-label="Ayuda">
-                    <i data-lucide="help-circle"></i>
-                  </button>
-
-                  <div className="chair-wrap" id="chair">
-                    <svg className="chair-svg" viewBox="0 0 430 420" aria-label="Sillón nórdico">
-                      <ellipse className="chair-shadow" cx="215" cy="380" rx="160" ry="24" />
-                      <path className="chair-color" d="M110 162c0-71 43-113 105-113s105 42 105 113v116H110z" />
-                      <rect className="chair-color" x="77" y="226" width="276" height="113" rx="48" />
-                      <rect className="chair-color" x="66" y="201" width="84" height="144" rx="38" />
-                      <rect className="chair-color" x="280" y="201" width="84" height="144" rx="38" />
-                      <path d="M119 337h34l-12 64h-39zM277 337h34l17 64h-39z" fill="#ba9871" />
-                      <path d="M133 173c37 17 127 17 164 0" fill="none" stroke="rgba(255,255,255,.24)" strokeWidth="8" strokeLinecap="round" />
-                    </svg>
-                  </div>
-
-                  <div className="drag-tip">Arrastrame por la habitación</div>
-
-                  <div className="demo-controls">
-                    <button className="circle-control" id="scaleDownButton" type="button" aria-label="Reducir"><i data-lucide="minus"></i></button>
-                    <button className="capture-control" id="captureButton" type="button" aria-label="Capturar"></button>
-                    <button className="circle-control" id="scaleUpButton" type="button" aria-label="Aumentar"><i data-lucide="plus"></i></button>
-                  </div>
+                  {selected ? (
+                    // eslint-disable-next-line react/no-unknown-property
+                    <model-viewer
+                      key={selected.id}
+                      src={selected.model_url}
+                      camera-controls
+                      auto-rotate
+                      shadow-intensity="1"
+                      exposure="0.95"
+                      environment-image="neutral"
+                      camera-orbit="35deg 78deg 2.6m"
+                      ar
+                      ar-modes="webxr scene-viewer quick-look"
+                      ar-scale="fixed"
+                      ar-placement="floor"
+                      style={{ width: '100%', height: '100%' }}
+                    >
+                      <button slot="ar-button" className="ar-real-btn">Ver en tu espacio (AR)</button>
+                    </model-viewer>
+                  ) : (
+                    <div className="empty-note" style={{ padding: 40 }}>Cargando catálogo…</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -876,22 +716,6 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
-
-      <div className="modal" id="demoModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-        <div className="modal-card">
-          <button className="modal-close" id="closeModalButton" type="button" aria-label="Cerrar">
-            <i data-lucide="x"></i>
-          </button>
-          <div className="modal-icon"><i data-lucide="scan-line"></i></div>
-          <h3 id="modalTitle">Abrí Reality desde tu celular</h3>
-          <p>Escaneá este código o abrí la demo en tu teléfono para probar el sillón en tu ambiente.</p>
-          <div className="qr-fake" aria-hidden="true"></div>
-          <button className="btn btn-primary" id="simulateARButton" type="button">
-            Simular acceso desde el celular
-            <i data-lucide="smartphone"></i>
-          </button>
-        </div>
-      </div>
 
       <div className="toast" id="toast" role="status" aria-live="polite">
         <i data-lucide="badge-check"></i>
