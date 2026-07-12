@@ -1,538 +1,98 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import Script from 'next/script';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '../../lib/supabaseClient';
+import Script from 'next/script';
+import { supabase } from '../lib/supabaseClient';
 
-const STORAGE_BUCKET = 'models';
-
-const EMPTY_FORM = {
-  name: '',
-  price: '',
-  slug: '',
-  alto: '',
-  ancho: '',
-  fondo: '',
-};
-
-function formatPrice(value) {
-  // El precio se guarda como texto libre (ej: "$ 355.000"), igual que en
-  // el resto de la app (panel viejo, widget, /sitio). No se convierte a número.
-  return value || '$ —';
-}
-
-function slugify(value) {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-function getInitials(email = '') {
-  const name = email.split('@')[0] || 'R';
-  const parts = name.split(/[._-]/).filter(Boolean);
-  return (parts[0]?.[0] || 'R').toUpperCase() + (parts[1]?.[0] || '').toUpperCase();
-}
-
-function ProductThumb({ product }) {
-  if (product.image_url) {
-    return <img src={product.image_url} alt="" />;
-  }
-
-  return (
-    <svg viewBox="0 0 56 56" aria-hidden="true">
-      <defs>
-        <linearGradient id={`seat-${product.id}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#b9d8ff" />
-          <stop offset="1" stopColor="#75a9ea" />
-        </linearGradient>
-      </defs>
-      <rect width="56" height="56" rx="12" fill="#f2f7ff" />
-      <ellipse cx="28" cy="44" rx="17" ry="3" fill="rgba(30,74,135,.12)" />
-      <rect x="15" y="19" width="26" height="19" rx="7" fill={`url(#seat-${product.id})`} />
-      <rect x="12" y="27" width="8" height="14" rx="4" fill="#7eade8" />
-      <rect x="36" y="27" width="8" height="14" rx="4" fill="#7eade8" />
-      <path d="M18 38h4l-1 7h-4zM34 38h4l1 7h-4z" fill="#b28f68" />
-    </svg>
-  );
-}
-
-export default function ProductosPage() {
-  const fileInputRef = useRef(null);
-  const accountRef = useRef(null);
-
-  const [user, setUser] = useState(null);
-  const [accountOpen, setAccountOpen] = useState(false);
+export default function HomePage() {
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [file, setFile] = useState(null);
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [slugTouched, setSlugTouched] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selected = products[selectedIndex] || null;
 
-  const [sourceMode, setSourceMode] = useState('file'); // 'file' | 'photos'
-  const [photoFiles, setPhotoFiles] = useState([]);
-  const [generating, setGenerating] = useState(false);
-  const [generationStatus, setGenerationStatus] = useState('');
-  const [generatedModelUrl, setGeneratedModelUrl] = useState(null);
-  const photoInputRef = useRef(null);
-  const pollingRef = useRef(null);
-
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const [installationOpen, setInstallationOpen] = useState(false);
-
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-
-  const [toast, setToast] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-
-  const filteredProducts = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-
-    return products.filter((product) => {
-      const matchesSearch =
-        !normalized ||
-        product.name?.toLowerCase().includes(normalized) ||
-        product.slug?.toLowerCase().includes(normalized);
-
-      const matchesStatus =
-        statusFilter === 'all' || product.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [products, search, statusFilter]);
-
+  // Traer el catálogo real publicado
   useEffect(() => {
-    loadInitialData();
+    supabase
+      .from('products')
+      .select('*')
+      .eq('status', 'published')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setProducts(data);
+      });
   }, []);
 
+  // Re-generar íconos cada vez que aparece contenido nuevo en el DOM
   useEffect(() => {
     if (window.lucide) window.lucide.createIcons();
-  }, [
-    products,
-    editingProduct,
-    installationOpen,
-    loadingProducts,
-    statusFilter,
-    confirmDelete,
-  ]);
+  }, [products, selectedIndex]);
 
   useEffect(() => {
-    function handleOutsideClick(event) {
-      if (accountRef.current && !accountRef.current.contains(event.target)) {
-        setAccountOpen(false);
-      }
+    document.title = 'Reality — Probá los muebles en tu casa';
+
+    if (window.lucide) window.lucide.createIcons();
+
+    const menuButton = document.getElementById('menuButton');
+    const navLinks = document.getElementById('navLinks');
+
+    function handleMenuClick() {
+      const isOpen = navLinks.classList.toggle('open');
+      menuButton.setAttribute('aria-expanded', String(isOpen));
+      menuButton.innerHTML = isOpen ? '<i data-lucide="x"></i>' : '<i data-lucide="menu"></i>';
+      window.lucide.createIcons();
     }
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
+    menuButton.addEventListener('click', handleMenuClick);
 
-  useEffect(() => {
+    const navLinkEls = navLinks.querySelectorAll('a');
+    function closeMenu() {
+      navLinks.classList.remove('open');
+      menuButton.setAttribute('aria-expanded', 'false');
+      menuButton.innerHTML = '<i data-lucide="menu"></i>';
+      window.lucide.createIcons();
+    }
+    navLinkEls.forEach((link) => link.addEventListener('click', closeMenu));
+
+    const revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.14 }
+    );
+    document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
+
+    const pilotForm = document.getElementById('pilotForm');
+    function handlePilotSubmit(event) {
+      event.preventDefault();
+      const businessName = document.getElementById('businessName').value.trim();
+      showToast('Solicitud enviada', `${businessName || 'Tu mueblería'} quedó registrada para la prueba piloto.`);
+      event.currentTarget.reset();
+    }
+    pilotForm.addEventListener('submit', handlePilotSubmit);
+
+    const toast = document.getElementById('toast');
+    const toastTitle = document.getElementById('toastTitle');
+    const toastMessage = document.getElementById('toastMessage');
+    let toastTimer;
+    function showToast(title, message) {
+      clearTimeout(toastTimer);
+      toastTitle.textContent = title;
+      toastMessage.textContent = message;
+      toast.classList.add('show');
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3400);
+    }
+
     return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      menuButton.removeEventListener('click', handleMenuClick);
+      navLinkEls.forEach((link) => link.removeEventListener('click', closeMenu));
     };
   }, []);
-
-  function showToast(title, message, type = 'success') {
-    setToast({ title, message, type });
-    window.clearTimeout(window.__realityToastTimer);
-    window.__realityToastTimer = window.setTimeout(() => setToast(null), 3400);
-  }
-
-  async function loadInitialData() {
-    setLoadingProducts(true);
-
-    const [{ data: authData }, { data, error }] = await Promise.all([
-      supabase.auth.getUser(),
-      supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false }),
-    ]);
-
-    setUser(authData?.user || null);
-
-    if (error) {
-      showToast(
-        'No pudimos cargar los productos',
-        'Revisá la conexión con Supabase e intentá nuevamente.',
-        'error'
-      );
-    } else {
-      setProducts(data || []);
-    }
-
-    setLoadingProducts(false);
-  }
-
-  function updateField(field, value) {
-    setForm((current) => {
-      const next = { ...current, [field]: value };
-
-      if (field === 'name' && !slugTouched) {
-        next.slug = slugify(value);
-      }
-
-      return next;
-    });
-  }
-
-  function selectFile(selectedFile) {
-    if (!selectedFile) return;
-
-    if (!selectedFile.name.toLowerCase().endsWith('.glb')) {
-      showToast(
-        'Formato no compatible',
-        'En esta versión solamente se pueden cargar archivos .glb.',
-        'error'
-      );
-      return;
-    }
-
-    if (selectedFile.size > 50 * 1024 * 1024) {
-      showToast(
-        'El archivo es demasiado pesado',
-        'El tamaño máximo permitido es de 50 MB.',
-        'error'
-      );
-      return;
-    }
-
-    setFile(selectedFile);
-  }
-
-  function handleDrop(event) {
-    event.preventDefault();
-    setDragging(false);
-    selectFile(event.dataTransfer.files?.[0]);
-  }
-
-  function resetForm() {
-    setForm(EMPTY_FORM);
-    setFile(null);
-    setEditingProduct(null);
-    setSlugTouched(false);
-    setSourceMode('file');
-    setPhotoFiles([]);
-    setGeneratedModelUrl(null);
-    setGenerationStatus('');
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    if (photoInputRef.current) {
-      photoInputRef.current.value = '';
-    }
-  }
-
-  function startEditing(product) {
-    setEditingProduct(product);
-    setForm({
-      name: product.name || '',
-      price: product.price || '',
-      slug: product.slug || '',
-      alto: product.alto || '',
-      ancho: product.ancho || '',
-      fondo: product.fondo || '',
-    });
-    setFile(null);
-    setSlugTouched(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  async function uploadModel(selectedFile) {
-    const extension = selectedFile.name.split('.').pop().toLowerCase();
-    const userFolder = user?.id || 'public';
-    const filePath = `${userFolder}/${crypto.randomUUID()}.${extension}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(filePath, selectedFile, {
-        cacheControl: '3600',
-        upsert: false,
-        contentType: 'model/gltf-binary',
-      });
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
-  }
-
-  async function handleGeneratePhotos() {
-    if (photoFiles.length < 2) {
-      showToast(
-        'Faltan fotos',
-        'Subí al menos 2 fotos del mueble, desde ángulos distintos.',
-        'error'
-      );
-      return;
-    }
-
-    setGenerating(true);
-    setGeneratedModelUrl(null);
-    setGenerationStatus('Subiendo fotos…');
-
-    const uploadedPaths = [];
-
-    try {
-      const userFolder = user?.id || 'public';
-      const imageUrls = [];
-
-      for (const photo of photoFiles) {
-        const path = `${userFolder}/photos/${crypto.randomUUID()}-${photo.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(path, photo, { cacheControl: '3600', upsert: false });
-
-        if (uploadError) throw uploadError;
-
-        uploadedPaths.push(path);
-        // La anotamos en la "lista de pendientes de borrar" — si algo falla
-        // a mitad de camino, la limpieza diaria la va a encontrar igual.
-        supabase.from('pending_photo_cleanup').insert({ path }).then(() => {});
-
-        const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-        imageUrls.push(data.publicUrl);
-      }
-
-      setGenerationStatus('Iniciando generación 3D…');
-
-      const { data: { session } } = await supabase.auth.getSession();
-      const authHeader = session?.access_token ? `Bearer ${session.access_token}` : '';
-
-      const startRes = await fetch('/api/photo-to-3d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
-        body: JSON.stringify({ imageUrls }),
-      });
-      const startData = await startRes.json();
-
-      if (startData.error || !startData.requestId) {
-        throw new Error(startData.error || 'No se pudo iniciar la generación');
-      }
-
-      setGenerationStatus('Generando el modelo 3D… esto puede tardar unos minutos');
-
-      pollingRef.current = setInterval(async () => {
-        try {
-          const statusRes = await fetch(
-            `/api/photo-to-3d/status?request_id=${startData.requestId}`,
-            { headers: { Authorization: authHeader } }
-          );
-          const statusData = await statusRes.json();
-
-          if (statusData.error) {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-            setGenerating(false);
-            setGenerationStatus('');
-            showToast('No se pudo generar el modelo', statusData.error, 'error');
-            cleanupPhotos(uploadedPaths);
-            return;
-          }
-
-          if (statusData.status === 'COMPLETED') {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-            setGenerating(false);
-            setGenerationStatus('');
-            setGeneratedModelUrl(statusData.modelUrl);
-            showToast('Modelo generado', 'El modelo 3D está listo — ya podés guardar el producto.');
-            // Ya generamos el modelo, no necesitamos más las fotos originales
-            cleanupPhotos(uploadedPaths);
-          }
-        } catch {
-          // seguimos intentando en el próximo intervalo
-        }
-      }, 4000);
-    } catch (error) {
-      setGenerating(false);
-      setGenerationStatus('');
-      showToast(
-        'No pudimos generar el modelo',
-        error?.message || 'Intentá nuevamente.',
-        'error'
-      );
-      cleanupPhotos(uploadedPaths);
-    }
-  }
-
-  function cleanupPhotos(paths) {
-    if (!paths.length) return;
-    supabase.storage.from(STORAGE_BUCKET).remove(paths).catch(() => {});
-    supabase.from('pending_photo_cleanup').delete().in('path', paths).then(() => {});
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault();
-
-    if (!form.name.trim() || !form.slug.trim()) {
-      showToast(
-        'Faltan datos',
-        'Completá el nombre y el slug del producto.',
-        'error'
-      );
-      return;
-    }
-
-    if (!editingProduct && !file && !generatedModelUrl) {
-      showToast(
-        'Falta el modelo 3D',
-        'Seleccioná un archivo .glb o generá el modelo desde fotos.',
-        'error'
-      );
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      let modelUrl = editingProduct?.model_url || '';
-
-      if (sourceMode === 'photos' && generatedModelUrl) {
-        modelUrl = generatedModelUrl;
-      } else if (file) {
-        modelUrl = await uploadModel(file);
-      }
-
-      const payload = {
-        name: form.name.trim(),
-        price: form.price.trim().startsWith('$') ? form.price.trim() : `$ ${form.price.trim()}`,
-        slug: form.slug.trim(),
-        alto: Number(form.alto || 0),
-        ancho: Number(form.ancho || 0),
-        fondo: Number(form.fondo || 0),
-        model_url: modelUrl,
-        status: editingProduct?.status || 'published',
-      };
-
-      if (editingProduct) {
-        const { data, error } = await supabase
-          .from('products')
-          .update(payload)
-          .eq('id', editingProduct.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        setProducts((current) =>
-          current.map((product) =>
-            product.id === editingProduct.id ? data : product
-          )
-        );
-
-        showToast(
-          'Producto actualizado',
-          `${data.name} se actualizó correctamente.`
-        );
-      } else {
-        const { data, error } = await supabase
-          .from('products')
-          .insert(payload)
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        setProducts((current) => [data, ...current]);
-
-        showToast(
-          'Producto publicado',
-          `${data.name} ya está disponible en el catálogo.`
-        );
-      }
-
-      resetForm();
-    } catch (error) {
-      console.error(error);
-      showToast(
-        'No pudimos guardar el producto',
-        error?.message || 'Revisá la configuración de Supabase.',
-        'error'
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function toggleStatus(product) {
-    const nextStatus =
-      product.status === 'published' ? 'draft' : 'published';
-
-    const { data, error } = await supabase
-      .from('products')
-      .update({ status: nextStatus })
-      .eq('id', product.id)
-      .select()
-      .single();
-
-    if (error) {
-      showToast(
-        'No pudimos cambiar el estado',
-        'Intentá nuevamente.',
-        'error'
-      );
-      return;
-    }
-
-    setProducts((current) =>
-      current.map((item) => (item.id === product.id ? data : item))
-    );
-
-    showToast(
-      nextStatus === 'published' ? 'Producto publicado' : 'Producto pausado',
-      `${product.name} cambió de estado correctamente.`
-    );
-  }
-
-  async function deleteProduct(product) {
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', product.id);
-
-    if (error) {
-      showToast(
-        'No pudimos borrar el producto',
-        'Intentá nuevamente.',
-        'error'
-      );
-      return;
-    }
-
-    setProducts((current) =>
-      current.filter((item) => item.id !== product.id)
-    );
-    setConfirmDelete(null);
-
-    if (editingProduct?.id === product.id) {
-      resetForm();
-    }
-
-    showToast(
-      'Producto eliminado',
-      `${product.name} se eliminó del catálogo.`
-    );
-  }
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
 
   return (
     <>
@@ -542,2020 +102,997 @@ export default function ProductosPage() {
         href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet"
       />
-      <Script
-        src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"
-        strategy="afterInteractive"
-        onLoad={() => window.lucide?.createIcons()}
-      />
-      <Script
-        type="module"
-        src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"
-        strategy="afterInteractive"
-      />
-
-      <main className="products-page">
-        <header className="topbar">
-          <Link className="brand" href="/">
-            <span className="brand-mark">
-              <i data-lucide="armchair"></i>
-            </span>
-            <span>Reality</span>
-          </Link>
-
-          <div className="topbar-actions">
-            <button className="notification-button" type="button" aria-label="Notificaciones">
-              <i data-lucide="bell"></i>
-              <span>3</span>
-            </button>
-
-            <div className="account-wrap" ref={accountRef}>
-              <button
-                className="account-trigger"
-                type="button"
-                onClick={() => setAccountOpen((current) => !current)}
-                aria-expanded={accountOpen}
-                aria-label="Cuenta"
-              >
-                {getInitials(user?.email)}
-              </button>
-
-              {accountOpen && (
-                <div className="account-dropdown">
-                  <div className="account-dropdown-info">
-                    <span className="account-dropdown-avatar">{getInitials(user?.email)}</span>
-                    <div>
-                      <strong>{user?.email || 'Tu cuenta'}</strong>
-                      <small>Administrador</small>
-                    </div>
-                  </div>
-                  <button
-                    className="account-dropdown-logout"
-                    type="button"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      handleSignOut();
-                    }}
-                  >
-                    <i data-lucide="log-out"></i>
-                    Cerrar sesión
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
-
-        <div className="page-shell">
-          <section className="page-heading">
-            <div>
-              <span className="heading-kicker">Catálogo 3D</span>
-              <h1>Productos</h1>
-              <p>
-                Cargá, revisá y administrá los muebles que tus clientes pueden
-                probar en realidad aumentada.
-              </p>
-            </div>
-
-            <div className="heading-stat">
-              <span className="stat-icon">
-                <i data-lucide="package-check"></i>
-              </span>
-              <span>
-                <strong>{products.length}</strong>
-                productos registrados
-              </span>
-            </div>
-          </section>
-
-          <section className={`installation-card ${installationOpen ? 'open' : ''}`}>
-            <button
-              type="button"
-              onClick={() => setInstallationOpen((current) => !current)}
-            >
-              <span className="installation-title">
-                <span className="info-icon">
-                  <i data-lucide="info"></i>
-                </span>
-                Instalación en el sitio del cliente
-                <small>Se hace una sola vez</small>
-              </span>
-
-              <i data-lucide="chevron-down"></i>
-            </button>
-
-            {installationOpen && (
-              <div className="installation-content">
-                <div>
-                  <strong>1. Copiá el código</strong>
-                  <p>
-                    Pegalo antes del cierre de la etiqueta
-                    <code>&lt;/body&gt;</code> del sitio del cliente. Este código ya
-                    tiene tu ID de mueblería incluido — no lo compartas con otra
-                    mueblería, cada una necesita el suyo propio.
-                  </p>
-                </div>
-
-                <pre>
-{`<script src="https://cutzstudio.vercel.app/widget.js"></script>
-<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}"></div>`}
-                </pre>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-`<script src="https://cutzstudio.vercel.app/widget.js"></script>\n<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}"></div>`
-                    );
-                    showToast('Código copiado', 'Ya podés pegarlo en el sitio del cliente.');
-                  }}
-                >
-                  <i data-lucide="copy"></i>
-                  Copiar código
-                </button>
-              </div>
-            )}
-          </section>
-
-          <section className="editor-grid">
-            <form className="product-form-card" onSubmit={handleSubmit}>
-              <div className="card-title-row">
-                <span className="card-title-icon">
-                  <i data-lucide={editingProduct ? 'pencil' : 'shopping-bag'}></i>
-                </span>
-
-                <div>
-                  <h2>
-                    {editingProduct
-                      ? `Editando ${editingProduct.name}`
-                      : 'Agregar nuevo producto'}
-                  </h2>
-                  <p>
-                    Completá la información y cargá el archivo 3D correspondiente.
-                  </p>
-                </div>
-
-                {editingProduct && (
-                  <button
-                    className="cancel-edit-button"
-                    type="button"
-                    onClick={resetForm}
-                  >
-                    <i data-lucide="x"></i>
-                    Cancelar edición
-                  </button>
-                )}
-              </div>
-
-              <div className="form-grid top-fields">
-                <label className="field field-name">
-                  <span>Nombre</span>
-                  <div className="input-control">
-                    <i data-lucide="tag"></i>
-                    <input
-                      type="text"
-                      placeholder="Ej: Sillón Estocolmo"
-                      value={form.name}
-                      onChange={(event) =>
-                        updateField('name', event.target.value)
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field field-price">
-                  <span>Precio</span>
-                  <div className="input-control">
-                    <span className="currency-prefix">$</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="Ej: 210.000"
-                      value={form.price}
-                      onChange={(event) =>
-                        updateField('price', event.target.value)
-                      }
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <label className="field slug-field">
-                <span>
-                  Slug
-                  <small>
-                    Tiene que ser igual al de la URL del producto
-                  </small>
-                </span>
-
-                <div className="input-control">
-                  <i data-lucide="link-2"></i>
-                  <input
-                    type="text"
-                    placeholder="Ej: sillon-estocolmo"
-                    value={form.slug}
-                    onChange={(event) => {
-                      setSlugTouched(true);
-                      updateField('slug', slugify(event.target.value));
-                    }}
-                    required
-                  />
-                </div>
-
-                <p className="field-help">
-                  Si la ficha del producto es
-                  <code> /productos/{form.slug || 'sillon-estocolmo'}</code>,
-                  el slug tiene que ser exactamente ese.
-                </p>
-              </label>
-
-              <div className="form-grid measurements-grid">
-                {[
-                  ['alto', 'Alto', 'move-vertical', '80'],
-                  ['ancho', 'Ancho', 'move-horizontal', '60'],
-                  ['fondo', 'Fondo', 'move-horizontal', '75'],
-                ].map(([key, label, icon, placeholder]) => (
-                  <label className="field" key={key}>
-                    <span>{label} (cm)</span>
-                    <div className="input-control">
-                      <i data-lucide={icon}></i>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder={`Ej: ${placeholder}`}
-                        value={form[key]}
-                        onChange={(event) =>
-                          updateField(key, event.target.value)
-                        }
-                      />
-                    </div>
-                  </label>
-                ))}
-              </div>
-
-              <div className="field file-field">
-                <span>Cómo cargar el modelo 3D</span>
-
-                <div className="source-toggle">
-                  <button
-                    type="button"
-                    className={sourceMode === 'file' ? 'active' : ''}
-                    onClick={() => setSourceMode('file')}
-                  >
-                    <i data-lucide="upload"></i>
-                    Ya tengo el archivo .glb
-                  </button>
-                  <button
-                    type="button"
-                    className={sourceMode === 'photos' ? 'active' : ''}
-                    onClick={() => setSourceMode('photos')}
-                  >
-                    <i data-lucide="sparkles"></i>
-                    Generar desde fotos (IA)
-                  </button>
-                </div>
-
-                {sourceMode === 'file' ? (
-                  <>
-                    <button
-                      className={`drop-zone ${dragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        setDragging(true);
-                      }}
-                      onDragLeave={() => setDragging(false)}
-                      onDrop={handleDrop}
-                    >
-                      <span className="upload-icon">
-                        <i data-lucide={file ? 'badge-check' : 'cloud-upload'}></i>
-                      </span>
-
-                      <span className="drop-copy">
-                        <strong>
-                          {file
-                            ? file.name
-                            : editingProduct?.model_url
-                              ? 'Modelo 3D actual cargado'
-                              : 'Arrastrá y soltá tu archivo .glb aquí'}
-                        </strong>
-                        <small>
-                          {file
-                            ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                            : 'o hacé clic para seleccionar'}
-                        </small>
-                      </span>
-                    </button>
-
-                    <input
-                      ref={fileInputRef}
-                      className="hidden-file-input"
-                      type="file"
-                      accept=".glb,model/gltf-binary"
-                      onChange={(event) =>
-                        selectFile(event.target.files?.[0])
-                      }
-                    />
-
-                    <p className="upload-help">
-                      Recomendamos archivos .glb optimizados. Tamaño máximo: 50 MB.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      className={`drop-zone ${photoFiles.length ? 'has-file' : ''}`}
-                      type="button"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      <span className="upload-icon">
-                        <i data-lucide={generatedModelUrl ? 'badge-check' : 'images'}></i>
-                      </span>
-                      <span className="drop-copy">
-                        <strong>
-                          {photoFiles.length
-                            ? `${photoFiles.length} foto(s) seleccionada(s)`
-                            : 'Subí 2 a 4 fotos del mueble'}
-                        </strong>
-                        <small>Desde ángulos distintos: frente, costado, atrás</small>
-                      </span>
-                    </button>
-
-                    <input
-                      ref={photoInputRef}
-                      className="hidden-file-input"
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(event) =>
-                        setPhotoFiles(Array.from(event.target.files || []).slice(0, 4))
-                      }
-                    />
-
-                    <button
-                      type="button"
-                      className="generate-button"
-                      onClick={handleGeneratePhotos}
-                      disabled={generating || photoFiles.length < 2}
-                    >
-                      <i data-lucide="sparkles"></i>
-                      {generating ? (generationStatus || 'Generando…') : 'Generar modelo 3D'}
-                    </button>
-
-                    {generatedModelUrl && !generating && (
-                      <p className="generate-success">
-                        <i data-lucide="check-circle-2"></i>
-                        Modelo generado — ya podés guardar el producto.
-                      </p>
-                    )}
-
-                    <p className="upload-help">
-                      La generación con IA es una aproximación — revisá el resultado antes de publicar.
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <div className="form-actions">
-                <button
-                  className="save-button"
-                  type="submit"
-                  disabled={saving}
-                >
-                  <i data-lucide={editingProduct ? 'save' : 'package-plus'}></i>
-                  {saving
-                    ? 'Guardando…'
-                    : editingProduct
-                      ? 'Guardar cambios'
-                      : 'Guardar producto'}
-                </button>
-              </div>
-            </form>
-          </section>
-
-          <section className="products-table-card">
-            <div className="table-card-header">
-              <div>
-                <h2>
-                  Productos registrados
-                  <span>{products.length}</span>
-                </h2>
-                <p>Administrá el catálogo publicado en Reality.</p>
-              </div>
-
-              <div className="table-tools">
-                <label className="search-control">
-                  <i data-lucide="search"></i>
-                  <input
-                    type="search"
-                    placeholder="Buscar productos..."
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                </label>
-
-                <label className="filter-control">
-                  <i data-lucide="list-filter"></i>
-                  <select
-                    value={statusFilter}
-                    onChange={(event) =>
-                      setStatusFilter(event.target.value)
-                    }
-                  >
-                    <option value="all">Todos</option>
-                    <option value="published">Publicados</option>
-                    <option value="draft">Pausados</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Slug</th>
-                    <th>Medidas</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {loadingProducts && (
-                    <tr>
-                      <td colSpan="5">
-                        <div className="empty-table-state">
-                          <span className="spinner" />
-                          Cargando productos…
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-
-                  {!loadingProducts && filteredProducts.length === 0 && (
-                    <tr>
-                      <td colSpan="5">
-                        <div className="empty-table-state">
-                          <span className="empty-state-icon">
-                            <i data-lucide="package-open"></i>
-                          </span>
-                          <strong>No encontramos productos</strong>
-                          <small>
-                            Probá con otra búsqueda o cargá uno nuevo.
-                          </small>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-
-                  {!loadingProducts &&
-                    filteredProducts.map((product) => (
-                      <tr key={product.id}>
-                        <td>
-                          <div className="product-cell">
-                            <span className="product-thumbnail">
-                              <ProductThumb product={product} />
-                            </span>
-
-                            <span>
-                              <strong>{product.name}</strong>
-                              <small>{formatPrice(product.price)}</small>
-                            </span>
-                          </div>
-                        </td>
-
-                        <td>
-                          <span className="slug-value">
-                            {product.slug}
-                          </span>
-                        </td>
-
-                        <td>
-                          <span className="measure-value">
-                            {product.ancho || 0} × {product.fondo || 0} ×{' '}
-                            {product.alto || 0} cm
-                          </span>
-                        </td>
-
-                        <td>
-                          <button
-                            className={`status-badge ${product.status === 'published' ? 'published' : 'draft'}`}
-                            type="button"
-                            onClick={() => toggleStatus(product)}
-                          >
-                            <span />
-                            {product.status === 'published'
-                              ? 'Publicado'
-                              : 'Pausado'}
-                          </button>
-                        </td>
-
-                        <td>
-                          <div className="row-actions">
-                            <button
-                              className="edit-button"
-                              type="button"
-                              onClick={() => startEditing(product)}
-                            >
-                              <i data-lucide="pencil"></i>
-                              Editar
-                            </button>
-
-                            <button
-                              className="delete-button"
-                              type="button"
-                              onClick={() => setConfirmDelete(product)}
-                            >
-                              <i data-lucide="trash-2"></i>
-                              Borrar
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="table-footer">
-              <span>
-                Mostrando {filteredProducts.length} de {products.length}{' '}
-                productos
-              </span>
-            </div>
-          </section>
-        </div>
-
-        {confirmDelete && (
-          <div className="modal-backdrop" onMouseDown={() => setConfirmDelete(null)}>
-            <div className="delete-modal" onMouseDown={(event) => event.stopPropagation()}>
-              <span className="delete-modal-icon">
-                <i data-lucide="trash-2"></i>
-              </span>
-
-              <h3>¿Eliminar {confirmDelete.name}?</h3>
-              <p>
-                El producto dejará de estar disponible en el catálogo y esta
-                acción no se puede deshacer.
-              </p>
-
-              <div>
-                <button type="button" onClick={() => setConfirmDelete(null)}>
-                  Cancelar
-                </button>
-                <button
-                  className="confirm-delete-button"
-                  type="button"
-                  onClick={() => deleteProduct(confirmDelete)}
-                >
-                  Sí, eliminar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {toast && (
-          <div className={`toast ${toast.type === 'error' ? 'error' : ''}`}>
-            <span>
-              <i data-lucide={toast.type === 'error' ? 'circle-alert' : 'badge-check'}></i>
-            </span>
-            <div>
-              <strong>{toast.title}</strong>
-              <p>{toast.message}</p>
-            </div>
-          </div>
-        )}
-      </main>
+      <Script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js" strategy="beforeInteractive" />
 
       <style>{`
         :root {
-          --blue-950: #0c2f6a;
-          --blue-900: #143b82;
-          --blue-800: #1454be;
-          --blue-700: #1269ed;
-          --blue-600: #2d82f6;
-          --blue-500: #599cff;
-          --blue-200: #d9eaff;
+          --blue-900: #143c82;
+          --blue-800: #174fbd;
+          --blue-700: #1769e8;
+          --blue-600: #2d7cf2;
+          --blue-500: #4b91ff;
+          --blue-300: #a8ccff;
+          --blue-200: #d8eaff;
           --blue-100: #edf6ff;
           --blue-50: #f7fbff;
-          --navy: #142f67;
-          --text: #50678f;
-          --muted: #8694ad;
+          --navy: #173568;
+          --text: #4b6086;
+          --muted: #7384a2;
           --white: #ffffff;
-          --border: #dce6f3;
-          --success: #1a9b56;
-          --success-soft: #e5f6eb;
-          --danger: #ef4a59;
-          --danger-soft: #fff0f2;
-          --shadow-sm: 0 8px 25px rgba(36, 83, 151, 0.07);
-          --shadow-md: 0 18px 48px rgba(38, 87, 160, 0.11);
-          --shadow-lg: 0 30px 80px rgba(28, 73, 144, 0.18);
-          --container: min(1240px, calc(100% - 40px));
+          --danger: #ff6a7a;
+          --shadow-sm: 0 8px 24px rgba(40, 92, 175, 0.08);
+          --shadow-md: 0 18px 48px rgba(40, 92, 175, 0.12);
+          --shadow-lg: 0 30px 80px rgba(29, 82, 168, 0.17);
+          --radius-xl: 38px;
+          --container: min(1040px, calc(100% - 32px));
         }
-
-        * {
-          box-sizing: border-box;
-        }
-
-        html,
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; scroll-padding-top: 100px; }
         body {
           margin: 0;
-          min-height: 100%;
-        }
-
-        body {
-          font-family: "Nunito", sans-serif;
           color: var(--text);
-          background: #f8fbff;
-        }
-
-        button,
-        input,
-        select {
-          font: inherit;
-        }
-
-        button,
-        a,
-        select {
-          -webkit-tap-highlight-color: transparent;
-        }
-
-        a {
-          color: inherit;
-          text-decoration: none;
-        }
-
-        button {
-          cursor: pointer;
-        }
-
-        .products-page {
-          min-height: 100vh;
           background:
-            radial-gradient(circle at 12% 0%, rgba(192, 222, 255, 0.58), transparent 22%),
-            radial-gradient(circle at 91% 10%, rgba(204, 228, 255, 0.55), transparent 23%),
-            linear-gradient(180deg, #f8fbff 0%, #f4f9ff 48%, #ffffff 100%);
+            radial-gradient(circle at 12% 5%, rgba(141, 194, 255, 0.22), transparent 20%),
+            radial-gradient(circle at 92% 11%, rgba(203, 227, 255, 0.52), transparent 18%),
+            linear-gradient(180deg, #fbfdff 0%, #f4f9ff 48%, #ffffff 100%);
+          font-family: "Nunito", sans-serif;
+          line-height: 1.55;
+          overflow-x: hidden;
         }
-
-        .topbar {
-          position: sticky;
-          z-index: 100;
-          top: 0;
-          min-height: 76px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 24px;
-          padding: 11px max(24px, calc((100vw - 1240px) / 2));
-          border-bottom: 1px solid rgba(31, 101, 209, 0.09);
-          background: rgba(255, 255, 255, 0.82);
-          box-shadow: 0 8px 30px rgba(33, 76, 143, 0.055);
-          backdrop-filter: blur(20px);
-        }
-
-        .brand {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          color: var(--blue-700);
+        img, svg { display: block; max-width: 100%; }
+        button, input, textarea { font: inherit; }
+        button, a { -webkit-tap-highlight-color: transparent; }
+        a { color: inherit; text-decoration: none; }
+        h1, h2, h3, h4, p { margin-top: 0; }
+        h1, h2, h3, h4, .brand {
           font-family: "Baloo 2", sans-serif;
-          font-size: 1.72rem;
-          font-weight: 800;
-          line-height: 1;
-        }
-
-        .brand-mark {
-          width: 42px;
-          height: 42px;
-          display: grid;
-          place-items: center;
-          padding: 8px;
-          border: 2px solid currentColor;
-          border-radius: 13px;
-          background: var(--white);
-          box-shadow: inset 0 0 0 4px var(--blue-100);
-        }
-
-        .brand-mark i {
-          width: 100%;
-          height: 100%;
-        }
-
-        .topbar-actions {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-        }
-
-        .notification-button {
-          position: relative;
-          width: 42px;
-          height: 42px;
-          display: grid;
-          place-items: center;
-          border: 1px solid var(--border);
-          border-radius: 14px;
-          color: #65799c;
-          background: rgba(255, 255, 255, 0.9);
-          box-shadow: var(--shadow-sm);
-        }
-
-        .notification-button i {
-          width: 19px;
-          height: 19px;
-        }
-
-        .notification-button span {
-          position: absolute;
-          top: -4px;
-          right: -4px;
-          width: 19px;
-          height: 19px;
-          display: grid;
-          place-items: center;
-          border: 2px solid var(--white);
-          border-radius: 50%;
-          color: var(--white);
-          background: var(--blue-700);
-          font-size: 0.63rem;
-          font-weight: 900;
-        }
-
-        .account-wrap {
-          position: relative;
-        }
-
-        .account-trigger {
-          width: 41px;
-          height: 41px;
-          display: grid;
-          place-items: center;
-          border: 0;
-          border-radius: 50%;
-          cursor: pointer;
-          color: var(--white);
-          background: linear-gradient(145deg, var(--blue-600), #0a5ee6);
-          box-shadow: 0 8px 18px rgba(29, 105, 227, 0.22);
-          font-size: 0.77rem;
-          font-weight: 900;
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-
-        .account-trigger:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 11px 22px rgba(29, 105, 227, 0.3);
-        }
-
-        .account-dropdown {
-          position: absolute;
-          z-index: 40;
-          top: calc(100% + 12px);
-          right: 0;
-          width: 260px;
-          padding: 14px;
-          border: 1px solid var(--border);
-          border-radius: 18px;
-          background: var(--white);
-          box-shadow: 0 20px 46px rgba(23, 58, 112, 0.16);
-        }
-
-        .account-dropdown-info {
-          display: flex;
-          align-items: center;
-          gap: 11px;
-          padding-bottom: 13px;
-          margin-bottom: 11px;
-          border-bottom: 1px solid var(--border);
-        }
-
-        .account-dropdown-avatar {
-          width: 38px;
-          height: 38px;
-          flex: 0 0 auto;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          color: var(--white);
-          background: linear-gradient(145deg, var(--blue-600), #0a5ee6);
-          font-size: 0.73rem;
-          font-weight: 900;
-        }
-
-        .account-dropdown-info strong {
-          display: block;
-          overflow: hidden;
           color: var(--navy);
-          font-size: 0.78rem;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          max-width: 175px;
+          line-height: 1.02;
+          letter-spacing: -0.025em;
         }
-
-        .account-dropdown-info small {
-          color: var(--muted);
-          font-size: 0.7rem;
-          font-weight: 700;
-        }
-
-        .account-dropdown-logout {
-          width: 100%;
-          min-height: 40px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 0 12px;
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          color: #65799c;
-          background: var(--white);
-          font-size: 0.78rem;
-          font-weight: 850;
-          cursor: pointer;
-        }
-
-        .account-dropdown-logout i {
-          width: 16px;
-          height: 16px;
-        }
-
-        .account-dropdown-logout:hover {
-          color: var(--danger);
-          border-color: #f3c7cd;
-          background: #fff5f6;
-        }
-
-        .page-shell {
+        .container { width: var(--container); margin-inline: auto; }
+        .section { padding: 56px 0; }
+        .section-card {
           width: var(--container);
           margin-inline: auto;
-          padding: 42px 0 70px;
-        }
-
-        .page-heading {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          gap: 32px;
-          margin-bottom: 28px;
-        }
-
-        .heading-kicker {
-          display: inline-flex;
-          margin-bottom: 7px;
-          color: var(--blue-700);
-          font-size: 0.75rem;
-          font-weight: 900;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        }
-
-        .page-heading h1 {
-          margin: 0 0 6px;
-          color: var(--navy);
-          font-family: "Baloo 2", sans-serif;
-          font-size: clamp(2.7rem, 5vw, 4.15rem);
-          font-weight: 800;
-          line-height: 0.92;
-          letter-spacing: -0.035em;
-        }
-
-        .page-heading p {
-          max-width: 680px;
-          margin: 0;
-          color: var(--muted);
-          font-size: 0.96rem;
-        }
-
-        .heading-stat {
-          min-width: 205px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 13px 16px;
-          border: 1px solid rgba(37, 112, 224, 0.11);
-          border-radius: 18px;
-          background: rgba(255, 255, 255, 0.76);
-          box-shadow: var(--shadow-sm);
-          backdrop-filter: blur(14px);
-        }
-
-        .stat-icon {
-          width: 42px;
-          height: 42px;
-          display: grid;
-          place-items: center;
-          border-radius: 14px;
-          color: var(--blue-700);
-          background: var(--blue-100);
-        }
-
-        .stat-icon i {
-          width: 21px;
-          height: 21px;
-        }
-
-        .heading-stat > span:last-child {
-          display: grid;
-          color: var(--muted);
-          font-size: 0.73rem;
-          font-weight: 800;
-        }
-
-        .heading-stat strong {
-          color: var(--navy);
-          font-size: 1.15rem;
-          line-height: 1;
-        }
-
-        .installation-card {
-          overflow: hidden;
-          margin-bottom: 23px;
-          border: 1px solid #bdd6fa;
-          border-radius: 17px;
-          background: rgba(247, 251, 255, 0.88);
-          box-shadow: var(--shadow-sm);
-        }
-
-        .installation-card > button {
-          width: 100%;
-          min-height: 58px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 20px;
-          padding: 0 20px;
-          border: 0;
-          color: var(--blue-700);
-          background: transparent;
-          font-weight: 900;
-          text-align: left;
-        }
-
-        .installation-card > button > i {
-          width: 18px;
-          height: 18px;
-          transition: transform 0.2s ease;
-        }
-
-        .installation-card.open > button > i {
-          transform: rotate(180deg);
-        }
-
-        .installation-title {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .installation-title small {
-          color: #6d83a8;
-          font-size: 0.72rem;
-          font-weight: 750;
-        }
-
-        .info-icon {
-          width: 28px;
-          height: 28px;
-          display: grid;
-          place-items: center;
-          border-radius: 9px;
-          color: var(--blue-700);
-          background: var(--white);
-          box-shadow: var(--shadow-sm);
-        }
-
-        .info-icon i {
-          width: 15px;
-          height: 15px;
-        }
-
-        .installation-content {
-          display: grid;
-          grid-template-columns: 1fr 1.3fr auto;
-          align-items: center;
-          gap: 20px;
-          padding: 18px 20px 20px;
-          border-top: 1px solid rgba(44, 114, 220, 0.09);
-          background: rgba(255, 255, 255, 0.7);
-        }
-
-        .installation-content strong {
-          color: var(--navy);
-          font-size: 0.88rem;
-        }
-
-        .installation-content p {
-          margin: 4px 0 0;
-          color: var(--muted);
-          font-size: 0.77rem;
-        }
-
-        .installation-content code {
-          margin-left: 4px;
-          color: var(--blue-700);
-        }
-
-        .installation-content pre {
-          overflow-x: auto;
-          margin: 0;
-          padding: 12px 14px;
-          border-radius: 12px;
-          color: #ddecff;
-          background: #16396c;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 0.7rem;
-          line-height: 1.5;
-        }
-
-        .installation-content > button {
-          min-height: 42px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 0 15px;
-          border: 0;
-          border-radius: 12px;
-          color: var(--white);
-          background: var(--blue-700);
-          font-size: 0.76rem;
-          font-weight: 900;
-          box-shadow: 0 10px 20px rgba(28, 103, 226, 0.22);
-        }
-
-        .installation-content > button i {
-          width: 15px;
-          height: 15px;
-        }
-
-        .editor-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 22px;
-          align-items: stretch;
-          margin-bottom: 23px;
-        }
-
-        .product-form-card,
-        .products-table-card {
-          border: 1px solid rgba(39, 110, 216, 0.1);
-          border-radius: 22px;
-          background: rgba(255, 255, 255, 0.88);
+          padding: 36px;
+          border: 1px solid rgba(44, 116, 229, 0.1);
+          border-radius: var(--radius-xl);
+          background: rgba(255, 255, 255, 0.9);
           box-shadow: var(--shadow-md);
           backdrop-filter: blur(18px);
         }
-
-        .product-form-card {
-          padding: 25px 26px 22px;
+        .section-heading { max-width: 640px; margin: 0 auto 30px; text-align: center; }
+        .section-heading h2 { margin-bottom: 10px; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 800; }
+        .section-heading p { margin-bottom: 0; font-size: 0.96rem; color: var(--muted); }
+        .eyebrow {
+          display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px;
+          padding: 7px 12px; border: 1px solid rgba(43, 121, 239, 0.12); border-radius: 999px;
+          background: rgba(255, 255, 255, 0.92); color: var(--blue-700);
+          font-size: 0.78rem; font-weight: 900; box-shadow: var(--shadow-sm);
         }
-
-        .card-title-row {
+        .eyebrow i { width: 14px; height: 14px; }
+        .btn {
+          min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+          gap: 8px; padding: 0 18px; border: 0; border-radius: 13px; cursor: pointer; font-weight: 900;
+          font-size: 0.88rem;
+          transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-primary {
+          color: var(--white); background: linear-gradient(135deg, var(--blue-600), #0f5fe6);
+          box-shadow: 0 10px 22px rgba(29, 108, 232, 0.28);
+        }
+        .btn-primary:hover { box-shadow: 0 14px 28px rgba(29, 108, 232, 0.34); }
+        .btn-secondary {
+          color: var(--blue-700); background: rgba(255, 255, 255, 0.95);
+          border: 1px solid rgba(49, 126, 235, 0.14); box-shadow: var(--shadow-sm);
+        }
+        .btn-small { min-height: 38px; padding: 0 15px; border-radius: 11px; font-size: 0.82rem; }
+        .btn i { width: 15px; height: 15px; }
+        .navbar-shell { position: sticky; z-index: 1000; top: 0; padding: 12px 0 0; pointer-events: none; }
+        .navbar {
+          width: var(--container); min-height: 58px; margin-inline: auto; display: flex;
+          align-items: center; justify-content: space-between; gap: 20px; padding: 8px 10px 8px 15px;
+          border: 1px solid rgba(32, 112, 232, 0.1); border-radius: 18px; background: rgba(255, 255, 255, 0.83);
+          box-shadow: 0 12px 36px rgba(42, 91, 161, 0.09); backdrop-filter: blur(20px); pointer-events: auto;
+        }
+        .logo { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+        .logo-mark {
+          width: 34px; height: 34px; display: grid; place-items: center; border: 2px solid var(--blue-600);
+          border-radius: 10px; color: var(--blue-600); background: var(--white); box-shadow: inset 0 0 0 3px var(--blue-100);
+        }
+        .logo-mark i { width: 18px; height: 18px; stroke-width: 2.4; }
+        .brand { font-size: 1.32rem; font-weight: 800; color: var(--blue-700); }
+        .nav-links { display: flex; align-items: center; justify-content: center; gap: 20px; font-size: 0.82rem; font-weight: 900; color: var(--navy); }
+        .nav-links a { transition: color 0.2s ease; }
+        .nav-links a:hover { color: var(--blue-700); }
+        .menu-button {
+          display: none; width: 38px; height: 38px; place-items: center; border: 0;
+          border-radius: 11px; background: var(--blue-100); color: var(--blue-700); cursor: pointer;
+        }
+        .hero {
+          position: relative;
+          min-height: 690px;
           display: flex;
           align-items: center;
-          gap: 12px;
+          overflow: hidden;
+          padding: 74px 0 122px;
+          isolation: isolate;
+          background:
+            radial-gradient(circle at 50% 33%, rgba(255, 255, 255, 0.98) 0 20%, rgba(255, 255, 255, 0.52) 44%, transparent 68%),
+            linear-gradient(180deg, #f8fbff 0%, #f2f8ff 100%);
+        }
+
+        .hero::before {
+          content: "";
+          position: absolute;
+          z-index: 0;
+          top: 36px;
+          left: -92px;
+          width: 270px;
+          height: 270px;
+          border-radius: 50%;
+          background: rgba(191, 219, 255, 0.33);
+          box-shadow: 0 0 90px rgba(109, 169, 244, 0.08);
+          pointer-events: none;
+        }
+
+        .hero::after {
+          content: "";
+          position: absolute;
+          z-index: 0;
+          top: 90px;
+          left: 50%;
+          width: 760px;
+          height: 460px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.58);
+          filter: blur(34px);
+          transform: translateX(-50%);
+          pointer-events: none;
+        }
+
+        .hero-content {
+          position: relative;
+          z-index: 5;
+          width: min(790px, calc(100% - 32px));
+          max-width: 790px;
+          margin: 0 auto;
+          text-align: center;
+        }
+
+        .hero .eyebrow {
           margin-bottom: 23px;
+          padding: 10px 17px;
+          border-color: rgba(35, 113, 229, 0.1);
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.94);
+          font-size: 0.86rem;
+          box-shadow: 0 10px 30px rgba(47, 94, 167, 0.08);
         }
 
-        .card-title-row h2 {
-          margin: 0 0 3px;
-          color: var(--navy);
-          font-family: "Baloo 2", sans-serif;
-          font-size: 1.35rem;
-          font-weight: 800;
-          line-height: 1;
-        }
-
-        .card-title-row p {
-          margin: 0;
-          color: var(--muted);
-          font-size: 0.74rem;
-        }
-
-        .card-title-icon {
-          width: 38px;
-          height: 38px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 auto;
-          border-radius: 13px;
-          color: var(--blue-700);
-          background: var(--blue-100);
-          box-shadow: inset 0 0 0 1px rgba(37, 111, 221, 0.08);
-        }
-
-        .card-title-icon i {
+        .hero .eyebrow i {
           width: 19px;
           height: 19px;
         }
 
-        .cancel-edit-button {
-          min-height: 36px;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          margin-left: auto;
-          padding: 0 11px;
-          border: 1px solid #dce6f3;
-          border-radius: 10px;
-          color: #7183a0;
-          background: var(--white);
-          font-size: 0.68rem;
-          font-weight: 850;
+        .hero h1 {
+          margin-bottom: 25px;
+          color: #14366f;
+          font-size: clamp(3.35rem, 5.5vw, 5rem);
+          font-weight: 800;
+          line-height: 0.96;
+          letter-spacing: -0.042em;
         }
 
-        .cancel-edit-button i {
-          width: 14px;
-          height: 14px;
-        }
-
-        .form-grid {
-          display: grid;
-          gap: 14px;
-        }
-
-        .top-fields {
-          grid-template-columns: 1.55fr 0.85fr;
-        }
-
-        .measurements-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          margin-top: 16px;
-        }
-
-        .field {
-          display: grid;
-          gap: 7px;
-        }
-
-        .field > span {
-          display: flex;
-          align-items: baseline;
-          gap: 7px;
-          color: #304f82;
-          font-size: 0.74rem;
-          font-weight: 900;
-        }
-
-        .field > span small {
-          color: var(--muted);
-          font-size: 0.62rem;
-          font-weight: 700;
-        }
-
-        .input-control {
+        .hero h1 span {
           position: relative;
+          display: block;
+          width: max-content;
+          max-width: 100%;
+          margin: 7px auto 0;
+          color: #1670ed;
         }
 
-        .input-control > i {
+        .hero h1 span::after {
+          content: "";
           position: absolute;
-          top: 50%;
-          left: 13px;
-          width: 16px;
-          height: 16px;
-          color: #8496b5;
-          transform: translateY(-50%);
-          pointer-events: none;
-        }
-
-        .input-control input {
-          width: 100%;
-          height: 43px;
-          padding: 0 13px 0 39px;
-          border: 1px solid #d7e2f1;
-          border-radius: 10px;
-          outline: none;
-          color: var(--navy);
-          background: rgba(255, 255, 255, 0.95);
-          font-size: 0.78rem;
-          font-weight: 700;
-          transition:
-            border-color 0.2s ease,
-            box-shadow 0.2s ease;
-        }
-
-        .input-control input::placeholder {
-          color: #a2afc3;
-          font-weight: 600;
-        }
-
-        .input-control input:focus {
-          border-color: #75aef8;
-          box-shadow: 0 0 0 4px rgba(45, 124, 242, 0.09);
-        }
-
-        .currency-prefix {
-          position: absolute;
-          top: 50%;
-          left: 13px;
-          width: 16px;
-          color: #8292ac;
-          font-size: 0.85rem;
-          font-weight: 800;
-          text-align: center;
-          transform: translateY(-50%);
-        }
-
-        .slug-field {
-          margin-top: 16px;
-        }
-
-        .field-help {
-          margin: -1px 0 0;
-          color: var(--muted);
-          font-size: 0.66rem;
-        }
-
-        .field-help code {
-          color: var(--blue-700);
-          font-family: inherit;
-          font-weight: 800;
-        }
-
-        .file-field {
-          margin-top: 17px;
-        }
-
-        .drop-zone {
-          width: 100%;
-          min-height: 82px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 13px;
-          padding: 14px 18px;
-          border: 1.5px dashed #82b1f7;
-          border-radius: 14px;
-          color: var(--blue-700);
-          background:
-            linear-gradient(135deg, rgba(245, 250, 255, 0.96), rgba(252, 254, 255, 0.9));
-          transition:
-            border-color 0.2s ease,
-            background 0.2s ease,
-            transform 0.2s ease;
-        }
-
-        .drop-zone:hover,
-        .drop-zone.dragging {
-          border-color: var(--blue-700);
-          background: var(--blue-100);
-          transform: translateY(-1px);
-        }
-
-        .drop-zone.has-file {
-          border-color: #45b978;
-          background: #f3fcf7;
-        }
-
-        .upload-icon {
-          width: 46px;
-          height: 46px;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          color: var(--blue-700);
-          background: rgba(226, 240, 255, 0.92);
-        }
-
-        .drop-zone.has-file .upload-icon {
-          color: var(--success);
-          background: var(--success-soft);
-        }
-
-        .upload-icon i {
-          width: 24px;
-          height: 24px;
-        }
-
-        .drop-copy {
-          display: grid;
-          text-align: left;
-        }
-
-        .drop-copy strong {
-          color: var(--blue-700);
-          font-size: 0.78rem;
-          font-weight: 900;
-        }
-
-        .drop-zone.has-file .drop-copy strong {
-          color: #18834a;
-        }
-
-        .drop-copy small {
-          color: var(--muted);
-          font-size: 0.66rem;
-          font-weight: 700;
-        }
-
-        .hidden-file-input {
-          display: none;
-        }
-
-        .upload-help {
-          margin: -1px 0 0;
-          color: var(--muted);
-          font-size: 0.62rem;
-          text-align: center;
-        }
-
-        .source-toggle {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 8px;
-          margin-bottom: 10px;
-        }
-
-        .source-toggle button {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          min-height: 40px;
-          padding: 0 10px;
-          border: 1px solid #d7e2f1;
-          border-radius: 11px;
-          color: #627598;
-          background: var(--white);
-          font-size: 0.72rem;
-          font-weight: 850;
-          cursor: pointer;
-        }
-
-        .source-toggle button i {
-          width: 14px;
-          height: 14px;
-        }
-
-        .source-toggle button.active {
-          border-color: var(--blue-600);
-          color: var(--blue-700);
-          background: var(--blue-50);
-        }
-
-        .generate-button {
-          width: 100%;
-          min-height: 44px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          margin-top: 10px;
-          border: 0;
-          border-radius: 12px;
-          color: var(--white);
-          background: linear-gradient(180deg, #3189f8, #1067ed);
-          font-size: 0.78rem;
-          font-weight: 900;
-          cursor: pointer;
-        }
-
-        .generate-button:disabled {
-          cursor: default;
-          opacity: 0.55;
-        }
-
-        .generate-button i {
-          width: 15px;
+          right: 3%;
+          bottom: -12px;
+          left: 4%;
           height: 15px;
-        }
-
-        .generate-success {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          margin: 10px 0 0;
-          color: #18834a;
-          font-size: 0.7rem;
-          font-weight: 850;
-        }
-
-        .generate-success i {
-          width: 14px;
-          height: 14px;
-        }
-
-        .form-actions {
-          display: flex;
-          justify-content: center;
-          margin-top: 18px;
-        }
-
-        .save-button {
-          min-width: 230px;
-          min-height: 45px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 9px;
-          padding: 0 24px;
-          border: 0;
-          border-radius: 13px;
-          color: var(--white);
-          background: linear-gradient(180deg, #3189f8, #1067ed);
-          box-shadow: 0 13px 24px rgba(29, 108, 231, 0.26);
-          font-size: 0.8rem;
-          font-weight: 900;
-          transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease,
-            opacity 0.2s ease;
-        }
-
-        .save-button:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 17px 30px rgba(29, 108, 231, 0.32);
-        }
-
-        .save-button:disabled {
-          cursor: wait;
-          opacity: 0.7;
-        }
-
-        .save-button i {
-          width: 17px;
-          height: 17px;
-        }
-
-        .products-table-card {
-          overflow: hidden;
-        }
-
-        .table-card-header {
-          min-height: 74px;
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: space-between;
-          gap: 14px 20px;
-          padding: 16px 20px;
-        }
-
-        .table-card-header h2 {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          margin: 0 0 3px;
-          color: var(--navy);
-          font-family: "Baloo 2", sans-serif;
-          font-size: 1.22rem;
-          font-weight: 800;
-          line-height: 1;
-        }
-
-        .table-card-header h2 span {
-          min-width: 25px;
-          height: 25px;
-          display: inline-grid;
-          place-items: center;
+          border-top: 5px solid #287ef0;
           border-radius: 50%;
-          color: var(--blue-700);
-          background: var(--blue-100);
-          font-family: "Nunito", sans-serif;
-          font-size: 0.68rem;
-          font-weight: 900;
+          transform: rotate(-1deg);
         }
 
-        .table-card-header p {
-          margin: 0;
-          color: var(--muted);
-          font-size: 0.69rem;
+        .hero-copy {
+          max-width: 660px;
+          margin: 0 auto 27px;
+          color: #536c96;
+          font-size: clamp(1rem, 1.3vw, 1.12rem);
+          line-height: 1.62;
         }
 
-        .table-tools {
+        .hero-actions {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
+          justify-content: center;
+          gap: 12px;
+          margin-bottom: 26px;
+        }
+
+        .hero-actions .btn {
+          min-width: 235px;
+          min-height: 53px;
+          border-radius: 15px;
+          font-size: 0.93rem;
+        }
+
+        .hero-actions .btn-primary {
+          background: linear-gradient(180deg, #3188f8 0%, #1267ec 100%);
+          box-shadow: 0 15px 30px rgba(28, 105, 228, 0.28);
+        }
+
+        .hero-actions .btn-secondary {
+          background: rgba(255, 255, 255, 0.95);
+          box-shadow: 0 11px 28px rgba(46, 87, 148, 0.09);
+        }
+
+        .hero-pills {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
           gap: 10px;
         }
 
-        .search-control,
-        .filter-control {
-          position: relative;
+        .micro-pill {
+          min-height: 46px;
           display: flex;
           align-items: center;
+          gap: 8px;
+          padding: 0 16px;
+          border: 1px solid rgba(43, 121, 239, 0.09);
+          border-radius: 14px;
+          color: var(--blue-700);
+          background: rgba(255, 255, 255, 0.92);
+          font-size: 0.78rem;
+          font-weight: 900;
+          box-shadow: 0 10px 28px rgba(43, 89, 160, 0.08);
+          backdrop-filter: blur(14px);
         }
 
-        .search-control > i,
-        .filter-control > i {
+        .micro-pill i {
+          width: 19px;
+          height: 19px;
+        }
+
+        .hero-scene {
           position: absolute;
-          left: 12px;
-          width: 15px;
-          height: 15px;
-          color: #8291aa;
+          z-index: 2;
+          bottom: 95px;
+          width: clamp(255px, 23vw, 380px);
+          pointer-events: none;
+          filter: drop-shadow(0 24px 30px rgba(37, 77, 132, 0.12));
+        }
+
+        .hero-scene img {
+          width: 100%;
+          height: auto;
+          display: block;
+        }
+
+        .hero-scene-left {
+          left: max(-10px, calc((100vw - 1540px) / 2));
+        }
+
+        .hero-scene-right {
+          right: max(-8px, calc((100vw - 1540px) / 2));
+          width: clamp(270px, 24vw, 400px);
+        }
+
+        .hero-dots {
+          position: absolute;
+          z-index: 1;
+          top: 103px;
+          right: 1.7%;
+          width: 132px;
+          height: 82px;
+          opacity: 0.52;
+          background-image: radial-gradient(circle, #6ca5f1 2.3px, transparent 2.6px);
+          background-size: 24px 24px;
           pointer-events: none;
         }
 
-        .search-control input {
-          width: 255px;
-          height: 39px;
-          padding: 0 14px 0 38px;
-          border: 1px solid #dce5f2;
-          border-radius: 12px;
-          outline: none;
-          color: var(--navy);
-          background: var(--white);
-          font-size: 0.73rem;
-        }
-
-        .filter-control select {
-          height: 39px;
-          padding: 0 30px 0 36px;
-          border: 1px solid #dce5f2;
-          border-radius: 12px;
-          outline: none;
-          color: #627598;
-          background: var(--white);
-          font-size: 0.73rem;
-          font-weight: 850;
-        }
-
-        .table-wrap {
-          overflow-x: auto;
-          margin: 0 18px;
-          border: 1px solid #dce5f1;
-          border-radius: 14px;
-        }
-
-        table {
+        .hero-wave {
+          position: absolute;
+          z-index: 3;
+          right: 0;
+          bottom: -1px;
+          left: 0;
           width: 100%;
-          min-width: 920px;
-          border-collapse: collapse;
-          background: rgba(255, 255, 255, 0.75);
+          height: 72px;
+          pointer-events: none;
         }
 
-        th {
-          height: 40px;
-          padding: 0 15px;
-          color: #61769b;
-          background: #f8fbff;
-          font-size: 0.66rem;
-          font-weight: 900;
-          text-align: left;
+        .hero-wave path {
+          fill: #ffffff;
         }
 
-        td {
-          height: 63px;
-          padding: 7px 15px;
-          border-top: 1px solid #e5ecf5;
-          color: #687b9a;
-          font-size: 0.72rem;
-          font-weight: 700;
+        .hero-mini-spark {
+          position: absolute;
+          z-index: 3;
+          top: 323px;
+          left: 19%;
+          width: 28px;
+          height: 28px;
+          color: #2379ee;
+          opacity: 0.92;
+          transform: rotate(-12deg);
+          pointer-events: none;
         }
 
-        .product-cell {
-          display: flex;
-          align-items: center;
-          gap: 11px;
-        }
-
-        .product-thumbnail {
-          width: 45px;
-          height: 45px;
-          display: grid;
-          place-items: center;
-          overflow: hidden;
-          flex: 0 0 auto;
-          border-radius: 10px;
-          background: var(--blue-50);
-        }
-
-        .product-thumbnail img,
-        .product-thumbnail svg {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .product-cell > span:last-child {
-          display: grid;
-          gap: 2px;
-        }
-
-        .product-cell strong {
-          color: var(--navy);
-          font-size: 0.78rem;
-        }
-
-        .product-cell small {
-          color: #8492a9;
-          font-size: 0.65rem;
-        }
-
-        .slug-value,
-        .measure-value {
-          color: #7788a4;
-          font-size: 0.68rem;
-        }
-
-        .status-badge {
-          min-height: 28px;
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-          padding: 0 11px;
-          border: 0;
+        .hero-mini-spark::before,
+        .hero-mini-spark::after {
+          content: "";
+          position: absolute;
+          top: 50%;
+          left: 50%;
           border-radius: 999px;
-          font-size: 0.66rem;
-          font-weight: 850;
+          background: currentColor;
+          transform: translate(-50%, -50%);
         }
 
-        .status-badge span {
-          width: 7px;
-          height: 7px;
-          border-radius: 50%;
-        }
-
-        .status-badge.published {
-          color: #21864f;
-          background: var(--success-soft);
-        }
-
-        .status-badge.published span {
-          background: #24a55d;
-        }
-
-        .status-badge.draft {
-          color: #8a6b26;
-          background: #fff6dd;
-        }
-
-        .status-badge.draft span {
-          background: #e0a928;
-        }
-
-        .row-actions {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .row-actions button {
-          min-height: 32px;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 0 12px;
-          border-radius: 9px;
-          background: var(--white);
-          font-size: 0.67rem;
-          font-weight: 850;
-        }
-
-        .row-actions i {
-          width: 14px;
-          height: 14px;
-        }
-
-        .edit-button {
-          border: 1px solid #dbe5f2;
-          color: #526a91;
-        }
-
-        .edit-button:hover {
-          color: var(--blue-700);
-          border-color: #b9d3f9;
-          background: var(--blue-50);
-        }
-
-        .delete-button {
-          border: 1px solid #ffd3d9;
-          color: var(--danger);
-        }
-
-        .delete-button:hover {
-          background: var(--danger-soft);
-        }
-
-        .empty-table-state {
-          min-height: 170px;
-          display: grid;
-          place-items: center;
-          align-content: center;
-          gap: 8px;
-          color: var(--muted);
-          text-align: center;
-        }
-
-        .empty-table-state strong {
-          color: var(--navy);
-        }
-
-        .empty-table-state small {
-          font-size: 0.67rem;
-        }
-
-        .empty-state-icon {
-          width: 48px;
-          height: 48px;
-          display: grid;
-          place-items: center;
-          border-radius: 15px;
-          color: var(--blue-700);
-          background: var(--blue-100);
-        }
-
-        .empty-state-icon i {
-          width: 25px;
-          height: 25px;
-        }
-
-        .spinner {
+        .hero-mini-spark::before {
           width: 27px;
-          height: 27px;
-          border: 3px solid #dceaff;
-          border-top-color: var(--blue-700);
-          border-radius: 50%;
-          animation: spin 0.75s linear infinite;
+          height: 3px;
         }
 
-        .table-footer {
-          min-height: 48px;
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          padding: 0 21px;
-          color: var(--muted);
-          font-size: 0.65rem;
-          font-weight: 700;
-        }
-
-        .modal-backdrop {
-          position: fixed;
-          z-index: 500;
-          inset: 0;
-          display: grid;
-          place-items: center;
-          padding: 20px;
-          background: rgba(11, 35, 72, 0.5);
-          backdrop-filter: blur(9px);
-        }
-
-        .delete-modal {
-          width: min(420px, 100%);
-          padding: 27px;
-          border-radius: 22px;
-          background: var(--white);
-          box-shadow: var(--shadow-lg);
-          text-align: center;
-        }
-
-        .delete-modal-icon {
-          width: 58px;
-          height: 58px;
-          display: grid;
-          place-items: center;
-          margin: 0 auto 15px;
-          border-radius: 18px;
-          color: var(--danger);
-          background: var(--danger-soft);
-        }
-
-        .delete-modal-icon i {
-          width: 27px;
+        .hero-mini-spark::after {
+          width: 3px;
           height: 27px;
         }
 
-        .delete-modal h3 {
-          margin: 0 0 8px;
-          color: var(--navy);
-          font-family: "Baloo 2", sans-serif;
-          font-size: 1.55rem;
-          line-height: 1;
-        }
-
-        .delete-modal p {
-          margin: 0 auto 20px;
-          color: var(--muted);
-          font-size: 0.77rem;
-        }
-
-        .delete-modal > div {
-          display: flex;
-          justify-content: center;
-          gap: 9px;
-        }
-
-        .delete-modal button {
-          min-height: 41px;
-          padding: 0 17px;
-          border: 1px solid #dbe5f2;
-          border-radius: 11px;
-          color: #657795;
-          background: var(--white);
-          font-size: 0.75rem;
-          font-weight: 850;
-        }
-
-        .delete-modal .confirm-delete-button {
-          border-color: var(--danger);
-          color: var(--white);
-          background: var(--danger);
-        }
-
-        .toast {
-          position: fixed;
-          z-index: 700;
-          right: 24px;
-          bottom: 24px;
-          max-width: min(380px, calc(100% - 48px));
-          display: flex;
-          align-items: flex-start;
-          gap: 11px;
-          padding: 15px 17px;
-          border: 1px solid rgba(37, 111, 220, 0.13);
-          border-radius: 16px;
-          background: rgba(255, 255, 255, 0.96);
-          box-shadow: var(--shadow-lg);
-          backdrop-filter: blur(14px);
-          animation: toastIn 0.22s ease both;
-        }
-
-        .toast > span {
-          width: 34px;
-          height: 34px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 auto;
-          border-radius: 11px;
-          color: var(--success);
-          background: var(--success-soft);
-        }
-
-        .toast.error > span {
-          color: var(--danger);
-          background: var(--danger-soft);
-        }
-
-        .toast i {
-          width: 18px;
-          height: 18px;
-        }
-
-        .toast strong {
-          display: block;
-          color: var(--navy);
-          font-size: 0.8rem;
-        }
-
-        .toast p {
-          margin: 2px 0 0;
-          color: var(--muted);
-          font-size: 0.69rem;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
-        @keyframes toastIn {
-          from {
-            opacity: 0;
-            transform: translateY(12px);
+        @media (max-width: 1220px) {
+          .hero {
+            min-height: 650px;
           }
-          to {
-            opacity: 1;
-            transform: translateY(0);
+
+          .hero-content {
+            max-width: 720px;
+          }
+
+          .hero h1 {
+            font-size: clamp(3.1rem, 5.7vw, 4.55rem);
+          }
+
+          .hero-scene {
+            bottom: 82px;
+            width: clamp(225px, 24vw, 300px);
+            opacity: 0.9;
+          }
+
+          .hero-scene-right {
+            width: clamp(235px, 25vw, 320px);
           }
         }
 
-        @media (max-width: 1040px) {
-          .installation-content {
-            grid-template-columns: 1fr;
+        @media (max-width: 930px) {
+          .hero {
+            min-height: 630px;
+            padding-top: 65px;
           }
 
-          .installation-content > button {
-            width: max-content;
-          }
-        }
-
-        @media (max-width: 780px) {
-          :root {
-            --container: min(100% - 22px, 1240px);
+          .hero-content {
+            max-width: 680px;
           }
 
-          .topbar {
-            padding-inline: 13px;
+          .hero-scene {
+            bottom: 52px;
+            width: 230px;
+            opacity: 0.28;
           }
 
-          .user-copy {
+          .hero-scene-left {
+            left: -60px;
+          }
+
+          .hero-scene-right {
+            right: -70px;
+            width: 250px;
+          }
+
+          .hero-dots,
+          .hero-mini-spark {
             display: none;
           }
+        }
 
-          .logout-button {
-            width: 41px;
-            padding: 0;
-            justify-content: center;
+        @media (max-width: 620px) {
+          .hero {
+            min-height: 650px;
+            padding: 55px 0 105px;
           }
 
-          .logout-button {
-            font-size: 0;
+          .hero::before {
+            width: 210px;
+            height: 210px;
           }
 
-          .page-shell {
-            padding-top: 28px;
+          .hero .eyebrow {
+            margin-bottom: 18px;
+            padding: 8px 12px;
+            font-size: 0.74rem;
           }
 
-          .page-heading {
-            align-items: flex-start;
+          .hero h1 {
+            margin-bottom: 22px;
+            font-size: clamp(2.7rem, 13vw, 3.75rem);
+            line-height: 0.98;
           }
 
-          .heading-stat {
-            display: none;
+          .hero h1 span {
+            margin-top: 6px;
           }
 
-          .page-heading h1 {
-            font-size: 3rem;
+          .hero h1 span::after {
+            bottom: -9px;
+            border-top-width: 4px;
           }
 
-          .top-fields,
-          .measurements-grid {
-            grid-template-columns: 1fr;
+          .hero-copy {
+            font-size: 0.95rem;
           }
 
-          .table-card-header {
-            align-items: stretch;
-            flex-direction: column;
-          }
-
-          .table-tools {
+          .hero-actions {
+            display: grid;
             width: 100%;
           }
 
-          .search-control {
-            flex: 1;
-          }
-
-          .search-control input {
-            width: 100%;
-          }
-        }
-
-        @media (max-width: 520px) {
-          .brand {
-            font-size: 1.42rem;
-          }
-
-          .brand-mark {
-            width: 38px;
-            height: 38px;
-          }
-
-          .notification-button {
-            display: none;
-          }
-
-          .product-form-card {
-            padding: 20px 16px;
-            border-radius: 18px;
-          }
-
-          .card-title-row {
-            align-items: flex-start;
-          }
-
-          .cancel-edit-button {
-            width: 37px;
-            min-width: 37px;
-            padding: 0;
-            justify-content: center;
-            font-size: 0;
-          }
-
-          .drop-zone {
-            justify-content: flex-start;
-          }
-
-          .save-button {
-            width: 100%;
+          .hero-actions .btn {
+            width: min(100%, 340px);
             min-width: 0;
+            margin-inline: auto;
           }
 
-          .table-tools {
-            flex-direction: column;
+          .hero-pills {
+            gap: 7px;
           }
 
-          .search-control,
-          .filter-control,
-          .filter-control select {
-            width: 100%;
+          .micro-pill {
+            min-height: 40px;
+            padding: 0 11px;
+            font-size: 0.7rem;
           }
 
-          .installation-title {
-            align-items: flex-start;
-            flex-wrap: wrap;
+          .micro-pill i {
+            width: 16px;
+            height: 16px;
           }
 
-          .installation-title small {
-            width: 100%;
-            padding-left: 38px;
-            margin-top: -6px;
+          .hero-scene {
+            display: none;
           }
+
+          .hero-wave {
+            height: 48px;
+          }
+        }
+
+        .comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        .comparison-card { position: relative; overflow: hidden; min-height: 270px; padding: 18px; border-radius: 20px; border: 1px solid rgba(40, 95, 178, 0.08); box-shadow: var(--shadow-sm); }
+        .comparison-card.bad { background: linear-gradient(135deg, rgba(255, 249, 250, 0.97), rgba(255, 242, 245, 0.88)), #fff; }
+        .comparison-card.good { background: linear-gradient(135deg, rgba(246, 251, 255, 0.98), rgba(234, 245, 255, 0.92)), #fff; }
+        .comparison-top { display: grid; grid-template-columns: 1fr 48%; gap: 16px; align-items: center; height: 100%; }
+        .status-pill { display: inline-flex; align-items: center; gap: 6px; width: max-content; margin-bottom: 13px; padding: 6px 9px; border-radius: 999px; background: var(--white); font-size: 0.74rem; font-weight: 900; box-shadow: var(--shadow-sm); }
+        .bad .status-pill { color: #ef5668; }
+        .good .status-pill { color: var(--blue-700); }
+        .status-pill i { width: 14px; height: 14px; }
+        .check-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; color: #516382; font-size: 0.82rem; font-weight: 700; }
+        .check-list li { display: flex; align-items: flex-start; gap: 7px; }
+        .check-list i { width: 14px; height: 14px; margin-top: 2px; flex: 0 0 auto; }
+        .bad .check-list i { color: var(--danger); }
+        .good .check-list i { color: var(--blue-700); }
+        .comparison-image { position: relative; overflow: hidden; height: 190px; border-radius: 16px; background-position: center; background-size: cover; box-shadow: 0 12px 22px rgba(35, 65, 108, 0.14); }
+        .bad .comparison-image { background-image: linear-gradient(rgba(67, 71, 78, 0.13), rgba(67, 71, 78, 0.13)), url("https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=88"); filter: grayscale(0.5) saturate(0.75); }
+        .good .comparison-image { background-image: linear-gradient(rgba(31, 92, 180, 0.04), rgba(31, 92, 180, 0.04)), url("https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?auto=format&fit=crop&w=900&q=88"); }
+        .comparison-badge { position: absolute; right: 12px; bottom: 12px; width: 44px; height: 44px; display: grid; place-items: center; border: 3px solid var(--white); border-radius: 50%; color: var(--white); box-shadow: 0 10px 24px rgba(30, 62, 111, 0.22); }
+        .bad .comparison-badge { background: var(--danger); }
+        .good .comparison-badge { background: var(--blue-700); }
+        .steps { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+        .step-card { position: relative; min-height: 250px; padding: 22px 18px 18px; border: 1px solid rgba(32, 114, 233, 0.1); border-radius: 20px; background: rgba(255, 255, 255, 0.92); text-align: center; box-shadow: var(--shadow-sm); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .step-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); }
+        .step-number { position: absolute; top: -15px; left: 50%; width: 34px; height: 34px; display: grid; place-items: center; border: 3px solid #f7fbff; border-radius: 50%; color: var(--white); background: linear-gradient(135deg, var(--blue-500), var(--blue-700)); font-family: "Baloo 2", sans-serif; font-size: 1.02rem; font-weight: 800; box-shadow: 0 8px 18px rgba(27, 105, 224, 0.28); transform: translateX(-50%); }
+        .step-visual { position: relative; height: 108px; display: grid; place-items: center; margin-bottom: 14px; }
+        .step-visual::before { content: ""; position: absolute; width: 98px; height: 84px; border-radius: 18px; background: linear-gradient(145deg, #ffffff, var(--blue-100)); box-shadow: var(--shadow-sm); }
+        .step-visual i { position: relative; z-index: 2; width: 50px; height: 50px; color: var(--blue-600); stroke-width: 1.45; }
+        .step-card h3 { margin-bottom: 7px; font-size: 1.14rem; font-weight: 800; }
+        .step-card p { margin-bottom: 0; color: var(--muted); font-size: 0.83rem; }
+        .demo-section { background: radial-gradient(circle at 20% 50%, rgba(144, 196, 255, 0.22), transparent 30%), linear-gradient(135deg, #f6fbff, #edf6ff); }
+        .demo-layout { display: grid; grid-template-columns: 0.78fr 1.65fr; gap: 20px; align-items: stretch; }
+        .demo-intro { display: flex; flex-direction: column; justify-content: center; padding: 12px 6px 12px 2px; }
+        .demo-intro h2 { margin-bottom: 10px; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 800; }
+        .demo-intro p { margin-bottom: 16px; color: var(--muted); font-size: 0.92rem; }
+        .demo-note { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; padding: 11px; border: 1px solid rgba(44, 119, 231, 0.1); border-radius: 14px; background: rgba(255, 255, 255, 0.68); font-size: 0.78rem; box-shadow: var(--shadow-sm); }
+        .demo-note i { width: 16px; height: 16px; color: var(--blue-700); flex: 0 0 auto; }
+        .widget { overflow: hidden; display: grid; grid-template-columns: 230px 1fr; min-height: 400px; border: 6px solid rgba(255, 255, 255, 0.95); border-radius: 24px; background: var(--white); box-shadow: var(--shadow-lg); }
+        .product-panel { position: relative; z-index: 4; padding: 18px 16px; border-right: 1px solid rgba(26, 91, 184, 0.09); background: rgba(255, 255, 255, 0.98); display: flex; flex-direction: column; }
+        .label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
+        .product-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; overflow-y: auto; max-height: 210px; }
+        .product-list-item {
+          display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+          padding: 9px 10px; border: 1px solid rgba(23, 73, 143, 0.1); border-radius: 11px;
+          background: var(--white); cursor: pointer; text-align: left; transition: border-color 0.15s ease, background 0.15s ease;
+        }
+        .product-list-item strong { font-size: 0.82rem; color: var(--navy); }
+        .product-list-item span { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
+        .product-list-item.active { border-color: var(--blue-600); background: var(--blue-50); }
+        .product-list-item:hover { border-color: var(--blue-500); }
+        .empty-note { font-size: 0.8rem; color: var(--muted); text-align: center; padding: 10px 4px; }
+        .measurements { display: grid; gap: 8px; margin-bottom: 16px; margin-top: auto; }
+        .measure { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #5d6f8c; font-size: 0.76rem; font-weight: 800; }
+        .measure span:first-child { display: flex; align-items: center; gap: 5px; }
+        .measure i { width: 14px; height: 14px; color: var(--blue-700); }
+        .powered-by { display: flex; align-items: center; justify-content: center; gap: 5px; color: #8a99b0; font-size: 0.66rem; font-weight: 800; }
+        .powered-by strong { color: var(--blue-700); }
+        .ar-stage { position: relative; overflow: hidden; min-height: 400px; background: #fafcff; }
+        .ar-real-btn {
+          background: var(--blue-600); color: #fff; border: none; padding: 10px 16px;
+          border-radius: 999px; font-size: 0.8rem; font-weight: 800; cursor: pointer;
+        }
+        .lock-pill { position: absolute; z-index: 6; top: 13px; left: 50%; display: flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); color: var(--blue-700); font-size: 0.66rem; font-weight: 900; box-shadow: var(--shadow-sm); transform: translateX(-50%); }
+        .lock-pill i { width: 11px; height: 11px; }
+        .benefits-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+        .benefit-card { min-height: 185px; padding: 20px 16px; border: 1px solid rgba(37, 111, 222, 0.1); border-radius: 18px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 250, 255, 0.94)); text-align: center; box-shadow: var(--shadow-sm); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .benefit-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); }
+        .benefit-icon { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 13px; border-radius: 18px; color: var(--blue-600); background: var(--blue-100); box-shadow: inset 0 0 0 1px rgba(44, 124, 242, 0.1); }
+        .benefit-icon i { width: 29px; height: 29px; stroke-width: 1.5; }
+        .benefit-card h3 { margin-bottom: 6px; font-size: 1.02rem; font-weight: 800; }
+        .benefit-card p { margin-bottom: 0; color: var(--muted); font-size: 0.8rem; }
+        .cta-section { padding: 12px 0 56px; }
+        .cta-card { position: relative; overflow: hidden; width: var(--container); min-height: 280px; margin-inline: auto; display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: center; gap: 22px; padding: 32px 36px; border-radius: 26px; color: var(--white); background: radial-gradient(circle at 90% 15%, rgba(255, 255, 255, 0.2), transparent 22%), linear-gradient(135deg, #1f73eb, #0d58d8 62%, #1249b3); box-shadow: 0 22px 52px rgba(28, 91, 194, 0.25); }
+        .cta-card::before, .cta-card::after { content: "✦"; position: absolute; color: rgba(255, 255, 255, 0.25); font-size: 3rem; }
+        .cta-card::before { top: 18px; right: 34%; }
+        .cta-card::after { right: 30px; bottom: 20px; font-size: 1.6rem; }
+        .cta-copy { position: relative; z-index: 2; }
+        .cta-copy h2 { max-width: 560px; margin-bottom: 10px; color: var(--white); font-size: clamp(1.9rem, 3.5vw, 2.8rem); font-weight: 800; }
+        .cta-copy p { max-width: 480px; margin-bottom: 18px; color: rgba(255, 255, 255, 0.83); font-size: 0.9rem; }
+        .pilot-proof { display: flex; align-items: center; gap: 11px; margin-top: 16px; }
+        .avatars { display: flex; }
+        .avatar { width: 31px; height: 31px; margin-left: -7px; display: grid; place-items: center; border: 2px solid rgba(255, 255, 255, 0.9); border-radius: 50%; background: linear-gradient(135deg, #d8eaff, #91bfff); color: var(--blue-900); font-size: 0.66rem; font-weight: 900; }
+        .avatar:first-child { margin-left: 0; }
+        .pilot-proof span { color: rgba(255, 255, 255, 0.86); font-size: 0.74rem; font-weight: 800; }
+        .pilot-form { position: relative; z-index: 3; padding: 18px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 20px; background: rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px); }
+        .pilot-form h3 { margin-bottom: 11px; color: var(--white); font-size: 1.24rem; }
+        .field { display: grid; gap: 5px; margin-bottom: 10px; }
+        .field label { color: rgba(255, 255, 255, 0.88); font-size: 0.7rem; font-weight: 900; }
+        .field input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 11px; outline: none; color: var(--navy); background: rgba(255, 255, 255, 0.94); font-size: 0.86rem; transition: box-shadow 0.2s ease, border 0.2s ease; }
+        .field input:focus { border-color: #9bc7ff; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2); }
+        .pilot-form .btn { width: 100%; margin-top: 4px; color: var(--blue-700); background: var(--white); }
+        footer { padding: 24px 0 34px; }
+        .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 0.84rem; }
+        .footer-mini { display: flex; gap: 20px; font-weight: 800; }
+        .toast { position: fixed; z-index: 3000; right: 24px; bottom: 24px; max-width: min(380px, calc(100% - 48px)); display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; border: 1px solid rgba(45, 124, 242, 0.14); border-radius: 18px; background: rgba(255, 255, 255, 0.95); box-shadow: var(--shadow-lg); backdrop-filter: blur(12px); opacity: 0; transform: translateY(16px); pointer-events: none; transition: opacity 0.22s ease, transform 0.22s ease; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast i { width: 22px; height: 22px; color: var(--blue-700); flex: 0 0 auto; }
+        .toast strong { display: block; color: var(--navy); margin-bottom: 2px; }
+        .toast span { color: var(--muted); font-size: 0.86rem; }
+        .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.65s ease, transform 0.65s ease; }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        @media (max-width: 1020px) {
+          .nav-links { gap: 18px; }
+          .hero { min-height: 480px; }
+          .comparison-top { grid-template-columns: 1fr; }
+          .comparison-image { height: 170px; }
+          .demo-layout { grid-template-columns: 1fr; }
+          .demo-intro { text-align: center; }
+          .demo-note { max-width: 500px; margin-inline: auto; }
+          .benefits-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .cta-card { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 820px) {
+          .navbar { position: relative; }
+          .nav-links { position: absolute; top: calc(100% + 10px); right: 0; left: 0; display: grid; gap: 2px; padding: 12px; border: 1px solid rgba(31, 103, 214, 0.1); border-radius: 18px; background: rgba(255, 255, 255, 0.97); box-shadow: var(--shadow-md); opacity: 0; visibility: hidden; transform: translateY(-8px); transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease; }
+          .nav-links.open { opacity: 1; visibility: visible; transform: translateY(0); }
+          .nav-links a { padding: 12px; border-radius: 12px; }
+          .nav-links a:hover { background: var(--blue-100); }
+          .navbar > .btn { display: none; }
+          .menu-button { display: grid; }
+          .hero { padding-top: 60px; }
+          .comparison-grid, .steps { grid-template-columns: 1fr; }
+          .steps { gap: 30px; }
+          .section-card { padding: 26px 18px; }
+          .widget { grid-template-columns: 1fr; }
+          .product-panel { border-right: 0; border-bottom: 1px solid rgba(26, 91, 184, 0.09); }
+          .ar-stage { min-height: 360px; }
+          .cta-card { padding: 28px 20px; }
+          .footer-inner { flex-direction: column; text-align: center; }
+        }
+        @media (max-width: 560px) {
+          :root { --container: min(100% - 22px, 1180px); }
+          .section { padding: 44px 0; }
+          .navbar-shell { padding-top: 10px; }
+          .navbar { min-height: 54px; padding: 6px 8px 6px 11px; border-radius: 16px; }
+          .logo-mark { width: 30px; height: 30px; border-radius: 9px; }
+          .brand { font-size: 1.14rem; }
+          .hero { min-height: 460px; padding: 46px 0 60px; }
+          .hero h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
+          .hero-actions { display: grid; }
+          .hero-actions .btn { width: min(100%, 300px); min-width: 0; }
+          .hero-pills { gap: 6px; }
+          .micro-pill { padding: 7px 9px; font-size: 0.68rem; }
+          .comparison-card { min-height: 0; padding: 14px; }
+          .comparison-image { height: 150px; }
+          .benefits-grid { grid-template-columns: 1fr; }
+          .widget { border-width: 4px; border-radius: 20px; }
+          .product-panel { padding: 16px 14px; }
+          .ar-stage { min-height: 320px; }
+          .lock-pill { display: none; }
+          .cta-card { border-radius: 22px; }
+          .cta-copy h2 { font-size: 2.1rem; }
         }
       `}</style>
+
+      <div className="navbar-shell">
+        <nav className="navbar" aria-label="Navegación principal">
+          <a className="logo" href="#inicio" aria-label="Reality, inicio">
+            <span className="logo-mark"><i data-lucide="armchair"></i></span>
+            <span className="brand">Reality</span>
+          </a>
+
+          <div className="nav-links" id="navLinks">
+            <a href="#problema">El problema</a>
+            <a href="#como-funciona">Cómo funciona</a>
+            <a href="#demo">Demo</a>
+            <a href="#beneficios">Beneficios</a>
+          </div>
+
+          <Link href="/login" className="btn btn-primary btn-small">Iniciar sesión</Link>
+
+          <button className="menu-button" id="menuButton" type="button" aria-label="Abrir menú" aria-expanded="false">
+            <i data-lucide="menu"></i>
+          </button>
+        </nav>
+      </div>
+
+      <main>
+        <section className="hero" id="inicio">
+          <div className="hero-dots" aria-hidden="true"></div>
+          <div className="hero-mini-spark" aria-hidden="true"></div>
+
+          <div className="hero-scene hero-scene-left" aria-hidden="true">
+            <img
+              src="/reality-hero-left.png"
+              alt=""
+              width="360"
+              height="365"
+              loading="eager"
+            />
+          </div>
+
+          <div className="hero-scene hero-scene-right" aria-hidden="true">
+            <img
+              src="/reality-hero-right.png"
+              alt=""
+              width="380"
+              height="350"
+              loading="eager"
+            />
+          </div>
+
+          <div className="hero-content reveal">
+            <div className="eyebrow">
+              <i data-lucide="sparkles"></i>
+              Realidad aumentada para mueblerías
+            </div>
+
+            <h1>
+              Tus clientes prueban los muebles en su casa
+              <span>antes de comprar</span>
+            </h1>
+
+            <p className="hero-copy">
+              Reality permite visualizar cada mueble en el ambiente real, con escala,
+              proporciones y colores precisos. Más confianza, menos dudas y más ventas.
+            </p>
+
+            <div className="hero-actions">
+              <a className="btn btn-primary" href="#piloto">
+                Quiero ser mueblería piloto
+                <i data-lucide="arrow-right"></i>
+              </a>
+
+              <a className="btn btn-secondary" href="#demo">
+                <i data-lucide="play-circle"></i>
+                Ver cómo funciona
+              </a>
+            </div>
+
+            <div className="hero-pills">
+              <span className="micro-pill">
+                <i data-lucide="smartphone"></i>
+                Sin apps
+              </span>
+              <span className="micro-pill">
+                <i data-lucide="ruler"></i>
+                Escala real
+              </span>
+              <span className="micro-pill">
+                <i data-lucide="code-2"></i>
+                Fácil de integrar
+              </span>
+              <span className="micro-pill">
+                <i data-lucide="zap"></i>
+                Listo en minutos
+              </span>
+            </div>
+          </div>
+
+          <svg
+            className="hero-wave"
+            viewBox="0 0 1440 80"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path d="M0,48 C180,12 310,73 520,54 C710,37 822,18 1030,52 C1200,79 1320,31 1440,45 L1440,80 L0,80 Z" />
+          </svg>
+        </section>
+
+        <section className="section" id="problema">
+          <div className="section-card reveal">
+            <div className="section-heading">
+              <span className="eyebrow"><i data-lucide="circle-help"></i> Menos incertidumbre</span>
+              <h2>Comprar muebles hoy es incierto. Con Reality, ya no.</h2>
+              <p>El cliente deja de imaginar cómo quedaría el producto y puede verlo directamente en su espacio antes de decidir.</p>
+            </div>
+
+            <div className="comparison-grid">
+              <article className="comparison-card bad">
+                <div className="comparison-top">
+                  <div>
+                    <div className="status-pill"><i data-lucide="circle-x"></i> Sin Reality</div>
+                    <ul className="check-list">
+                      <li><i data-lucide="x-circle"></i> No saben si va a quedar bien.</li>
+                      <li><i data-lucide="x-circle"></i> Dudas sobre tamaño y color.</li>
+                      <li><i data-lucide="x-circle"></i> Más preguntas antes de comprar.</li>
+                      <li><i data-lucide="x-circle"></i> Devoluciones y cancelaciones.</li>
+                      <li><i data-lucide="x-circle"></i> Menos confianza, menos ventas.</li>
+                    </ul>
+                  </div>
+                  <div className="comparison-image">
+                    <div className="comparison-badge"><i data-lucide="x"></i></div>
+                  </div>
+                </div>
+              </article>
+
+              <article className="comparison-card good">
+                <div className="comparison-top">
+                  <div>
+                    <div className="status-pill"><i data-lucide="badge-check"></i> Con Reality</div>
+                    <ul className="check-list">
+                      <li><i data-lucide="check-circle-2"></i> Lo prueban en su espacio.</li>
+                      <li><i data-lucide="check-circle-2"></i> Ven tamaño y proporciones reales.</li>
+                      <li><i data-lucide="check-circle-2"></i> Compran con mayor confianza.</li>
+                      <li><i data-lucide="check-circle-2"></i> Menos devoluciones.</li>
+                      <li><i data-lucide="check-circle-2"></i> Más conversiones para tu tienda.</li>
+                    </ul>
+                  </div>
+                  <div className="comparison-image">
+                    <div className="comparison-badge"><i data-lucide="check"></i></div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section className="section" id="como-funciona">
+          <div className="container">
+            <div className="section-heading reveal">
+              <span className="eyebrow"><i data-lucide="workflow"></i> Configuración simple</span>
+              <h2>Así de simple funciona</h2>
+              <p>Nosotros nos ocupamos de la parte técnica para que tu equipo pueda empezar sin cambiar su forma de trabajar.</p>
+            </div>
+
+            <div className="steps">
+              <article className="step-card reveal">
+                <div className="step-number">1</div>
+                <div className="step-visual"><i data-lucide="cloud-upload"></i></div>
+                <h3>Enviás tus productos</h3>
+                <p>Subís fotos, medidas, colores y variantes desde un panel simple e intuitivo.</p>
+              </article>
+              <article className="step-card reveal">
+                <div className="step-number">2</div>
+                <div className="step-visual"><i data-lucide="scan-search"></i></div>
+                <h3>Revisamos y publicamos</h3>
+                <p>Nuestro equipo controla cada producto y lo deja listo para usarse en realidad aumentada.</p>
+              </article>
+              <article className="step-card reveal">
+                <div className="step-number">3</div>
+                <div className="step-visual"><i data-lucide="code-xml"></i></div>
+                <h3>Lo instalás en tu sitio</h3>
+                <p>Pegás un código simple y listo. No necesitás migrar de plataforma ni rehacer tu tienda.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section className="section demo-section" id="demo">
+          <div className="section-card reveal">
+            <div className="demo-layout">
+              <div className="demo-intro">
+                <span className="eyebrow"><i data-lucide="sparkles"></i> Catálogo real</span>
+                <h2>Viendo es creyendo</h2>
+                <p>Esto no es una simulación: son los productos reales cargados en la plataforma. Elegí uno de la lista y probalo en 3D.</p>
+
+                <div className="demo-note">
+                  <i data-lucide="move"></i>
+                  <span>Desde el celular, el botón "Ver en tu espacio" abre la cámara real y ancla el mueble a escala exacta.</span>
+                </div>
+              </div>
+
+              <div className="widget">
+                <aside className="product-panel">
+                  <span className="label">Catálogo publicado</span>
+                  <div className="product-list">
+                    {products.length === 0 && (
+                      <div className="empty-note">Todavía no hay productos publicados.</div>
+                    )}
+                    {products.map((p, i) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`product-list-item${i === selectedIndex ? ' active' : ''}`}
+                        onClick={() => setSelectedIndex(i)}
+                      >
+                        <strong>{p.name}</strong>
+                        <span>{p.price}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {selected && (
+                    <div className="measurements">
+                      <div className="measure"><span><i data-lucide="move-horizontal"></i> Ancho</span><span>{selected.ancho} cm</span></div>
+                      <div className="measure"><span><i data-lucide="move-horizontal"></i> Profundidad</span><span>{selected.fondo} cm</span></div>
+                      <div className="measure"><span><i data-lucide="move-vertical"></i> Alto</span><span>{selected.alto} cm</span></div>
+                    </div>
+                  )}
+
+                  <div className="powered-by">Con tecnología de <strong>Reality</strong></div>
+                </aside>
+
+                <div className="ar-stage">
+                  <span className="lock-pill"><i data-lucide="lock-keyhole"></i> Escala real bloqueada</span>
+                  {selected ? (
+                    // eslint-disable-next-line react/no-unknown-property
+                    <model-viewer
+                      key={selected.id}
+                      src={selected.model_url}
+                      camera-controls
+                      auto-rotate
+                      shadow-intensity="1"
+                      exposure="0.95"
+                      environment-image="neutral"
+                      camera-orbit="35deg 78deg 2.6m"
+                      ar
+                      ar-modes="webxr scene-viewer quick-look"
+                      ar-scale="fixed"
+                      ar-placement="floor"
+                      style={{ width: '100%', height: '100%' }}
+                    >
+                      <button slot="ar-button" className="ar-real-btn">Ver en tu espacio (AR)</button>
+                    </model-viewer>
+                  ) : (
+                    <div className="empty-note" style={{ padding: 40 }}>Cargando catálogo…</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="section" id="beneficios">
+          <div className="container">
+            <div className="section-heading reveal">
+              <span className="eyebrow"><i data-lucide="heart-handshake"></i> Hecho para mueblerías</span>
+              <h2>Pensado para vender más sin complicar tu operación</h2>
+              <p>Reality se adapta a tu tienda actual y deja la experiencia técnica resuelta para tu equipo y tus clientes.</p>
+            </div>
+
+            <div className="benefits-grid">
+              <article className="benefit-card reveal">
+                <div className="benefit-icon"><i data-lucide="scan-3d"></i></div>
+                <h3>Escala real bloqueada</h3>
+                <p>Tus muebles se ven en tamaño real y con proporciones exactas, sin distorsiones.</p>
+              </article>
+              <article className="benefit-card reveal">
+                <div className="benefit-icon"><i data-lucide="cloud-upload"></i></div>
+                <h3>Panel simple de carga</h3>
+                <p>Subí productos y variantes fácilmente. Nosotros nos ocupamos de lo técnico.</p>
+              </article>
+              <article className="benefit-card reveal">
+                <div className="benefit-icon"><i data-lucide="blocks"></i></div>
+                <h3>Integración sin migrar</h3>
+                <p>Funciona con tu tienda actual: Shopify, Tiendanube, WooCommerce o desarrollo propio.</p>
+              </article>
+              <article className="benefit-card reveal">
+                <div className="benefit-icon"><i data-lucide="globe-2"></i></div>
+                <h3>Funciona sin apps</h3>
+                <p>El cliente lo usa desde el navegador de su celular. No necesita descargar nada.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section className="cta-section" id="piloto">
+          <div className="cta-card reveal">
+            <div className="cta-copy">
+              <h2>Sumate como mueblería piloto y llevá tus ventas al siguiente nivel</h2>
+              <p>Estamos seleccionando mueblerías que quieran probar Reality, sumar productos y crecer junto a nosotros desde el comienzo.</p>
+
+              <div className="pilot-proof">
+                <div className="avatars" aria-hidden="true">
+                  <span className="avatar">MR</span>
+                  <span className="avatar">CN</span>
+                  <span className="avatar">LM</span>
+                </div>
+                <span>Más mueblerías ya están probando la experiencia.</span>
+              </div>
+            </div>
+
+            <form className="pilot-form" id="pilotForm">
+              <h3>Quiero conocer Reality</h3>
+
+              <div className="field">
+                <label htmlFor="businessName">Nombre de la mueblería</label>
+                <input id="businessName" name="businessName" type="text" placeholder="Ej: Casa Nórdica" required />
+              </div>
+
+              <div className="field">
+                <label htmlFor="contactEmail">Email de contacto</label>
+                <input id="contactEmail" name="contactEmail" type="email" placeholder="hola@tumuebleria.com" required />
+              </div>
+
+              <div className="field">
+                <label htmlFor="website">Sitio web o Instagram</label>
+                <input id="website" name="website" type="text" placeholder="@tumuebleria" />
+              </div>
+
+              <button className="btn" type="submit">
+                Quiero ser mueblería piloto
+                <i data-lucide="arrow-right"></i>
+              </button>
+            </form>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div className="container footer-inner">
+          <div className="logo">
+            <span className="logo-mark"><i data-lucide="armchair"></i></span>
+            <span className="brand">Reality</span>
+          </div>
+          <span>© 2026 Reality. Realidad aumentada para mueblerías.</span>
+          <div className="footer-mini">
+            <a href="#inicio">Inicio</a>
+            <a href="#demo">Demo</a>
+          </div>
+        </div>
+      </footer>
+
+      <div className="toast" id="toast" role="status" aria-live="polite">
+        <i data-lucide="badge-check"></i>
+        <div>
+          <strong id="toastTitle">Listo</strong>
+          <span id="toastMessage">La acción se completó correctamente.</span>
+        </div>
+      </div>
     </>
   );
 }
