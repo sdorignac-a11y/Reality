@@ -60,26 +60,6 @@ function ProductThumb({ product }) {
   );
 }
 
-function EmptyPreview() {
-  return (
-    <svg className="empty-chair" viewBox="0 0 340 250" aria-hidden="true">
-      <defs>
-        <linearGradient id="previewChair" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#b9d9ff" />
-          <stop offset="1" stopColor="#6f9fdf" />
-        </linearGradient>
-      </defs>
-      <ellipse cx="170" cy="216" rx="100" ry="17" fill="rgba(34,75,133,.11)" />
-      <path d="M96 101c0-50 29-78 74-78s74 28 74 78v69H96z" fill="url(#previewChair)" />
-      <rect x="70" y="137" width="200" height="70" rx="29" fill="#77a7e5" />
-      <rect x="62" y="122" width="55" height="91" rx="25" fill="#6d9cdb" />
-      <rect x="223" y="122" width="55" height="91" rx="25" fill="#6d9cdb" />
-      <path d="M94 203h23l-7 33H87zM223 203h23l10 33h-23z" fill="#bf9e75" />
-      <path d="M115 103c28 10 82 10 110 0" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export default function ProductosPage() {
   const fileInputRef = useRef(null);
 
@@ -100,11 +80,6 @@ export default function ProductosPage() {
 
   const [toast, setToast] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
-
-  const previewModelUrl = useMemo(() => {
-    if (file) return URL.createObjectURL(file);
-    return editingProduct?.model_url || '';
-  }, [file, editingProduct]);
 
   const filteredProducts = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -136,14 +111,6 @@ export default function ProductosPage() {
     statusFilter,
     confirmDelete,
   ]);
-
-  useEffect(() => {
-    return () => {
-      if (file && previewModelUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(previewModelUrl);
-      }
-    };
-  }, [file, previewModelUrl]);
 
   function showToast(title, message, type = 'success') {
     setToast({ title, message, type });
@@ -724,71 +691,6 @@ export default function ProductosPage() {
                 </button>
               </div>
             </form>
-
-            <aside className="preview-card">
-              <div className="card-title-row preview-title">
-                <span className="card-title-icon">
-                  <i data-lucide="box"></i>
-                </span>
-                <div>
-                  <h2>Vista previa</h2>
-                  <p>Así se verá el producto dentro del visor.</p>
-                </div>
-              </div>
-
-              <div className="preview-stage">
-                {previewModelUrl ? (
-                  <model-viewer
-                    key={previewModelUrl}
-                    src={previewModelUrl}
-                    camera-controls
-                    auto-rotate
-                    shadow-intensity="1"
-                    exposure="0.95"
-                    environment-image="neutral"
-                    camera-orbit="35deg 76deg 2.7m"
-                    style={{ width: '100%', height: '100%' }}
-                  />
-                ) : (
-                  <EmptyPreview />
-                )}
-
-                <span className="preview-grid" />
-              </div>
-
-              <p className="preview-caption">
-                {previewModelUrl
-                  ? 'Podés girar el producto y acercar la cámara.'
-                  : 'Subí un archivo 3D para ver la vista previa.'}
-              </p>
-
-              <div className="tips-card">
-                <div className="tips-title">
-                  <i data-lucide="lightbulb"></i>
-                  <strong>Consejos para mejores resultados</strong>
-                </div>
-
-                <ul>
-                  <li><i data-lucide="check"></i> Usá modelos en escala real.</li>
-                  <li><i data-lucide="check"></i> Centrá el modelo en el origen.</li>
-                  <li><i data-lucide="check"></i> Reducí polígonos y texturas.</li>
-                  <li><i data-lucide="check"></i> Exportá en formato .glb.</li>
-                </ul>
-              </div>
-
-              <div className="status-info-card">
-                <span>
-                  <i data-lucide="shield-check"></i>
-                </span>
-                <div>
-                  <strong>Estado del producto</strong>
-                  <p>
-                    Los productos nuevos se publican automáticamente. Podés
-                    pausarlos, editarlos o eliminarlos cuando quieras.
-                  </p>
-                </div>
-              </div>
-            </aside>
           </section>
 
           <section className="products-table-card">
@@ -1411,14 +1313,13 @@ export default function ProductosPage() {
 
         .editor-grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.82fr);
+          grid-template-columns: 1fr;
           gap: 22px;
           align-items: stretch;
           margin-bottom: 23px;
         }
 
         .product-form-card,
-        .preview-card,
         .products-table-card {
           border: 1px solid rgba(39, 110, 216, 0.1);
           border-radius: 22px;
@@ -1429,10 +1330,6 @@ export default function ProductosPage() {
 
         .product-form-card {
           padding: 25px 26px 22px;
-        }
-
-        .preview-card {
-          padding: 25px 20px 20px;
         }
 
         .card-title-row {
@@ -1722,140 +1619,6 @@ export default function ProductosPage() {
         .save-button i {
           width: 17px;
           height: 17px;
-        }
-
-        .preview-title {
-          margin-bottom: 10px;
-        }
-
-        .preview-stage {
-          position: relative;
-          overflow: hidden;
-          height: 225px;
-          display: grid;
-          place-items: center;
-          border-radius: 16px;
-          background:
-            radial-gradient(circle at 50% 40%, rgba(235, 244, 255, 0.92), rgba(255, 255, 255, 0.8) 58%);
-        }
-
-        .preview-stage model-viewer {
-          position: relative;
-          z-index: 3;
-        }
-
-        .empty-chair {
-          position: relative;
-          z-index: 3;
-          width: 82%;
-          filter: drop-shadow(0 18px 15px rgba(37, 70, 116, 0.13));
-        }
-
-        .preview-grid {
-          position: absolute;
-          z-index: 1;
-          right: 0;
-          bottom: -24px;
-          left: 0;
-          height: 115px;
-          opacity: 0.45;
-          background-image:
-            linear-gradient(rgba(73, 131, 220, 0.18) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(73, 131, 220, 0.18) 1px, transparent 1px);
-          background-size: 25px 25px;
-          transform: perspective(250px) rotateX(55deg);
-          transform-origin: bottom;
-        }
-
-        .preview-caption {
-          margin: 1px 0 15px;
-          color: var(--muted);
-          font-size: 0.68rem;
-          text-align: center;
-        }
-
-        .tips-card {
-          padding: 15px;
-          border: 1px solid #dbe6f3;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.82);
-        }
-
-        .tips-title {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: var(--navy);
-          font-size: 0.75rem;
-        }
-
-        .tips-title i {
-          width: 17px;
-          height: 17px;
-          color: #f2a51c;
-        }
-
-        .tips-card ul {
-          display: grid;
-          gap: 7px;
-          margin: 12px 0 0;
-          padding: 0;
-          list-style: none;
-          color: #677b9e;
-          font-size: 0.66rem;
-          font-weight: 700;
-        }
-
-        .tips-card li {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-        }
-
-        .tips-card li i {
-          width: 13px;
-          height: 13px;
-          color: var(--success);
-        }
-
-        .status-info-card {
-          display: flex;
-          gap: 11px;
-          margin-top: 13px;
-          padding: 14px;
-          border: 1px solid #cfe2ff;
-          border-radius: 14px;
-          background: linear-gradient(135deg, #f7fbff, #edf5ff);
-        }
-
-        .status-info-card > span {
-          width: 31px;
-          height: 31px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 auto;
-          border-radius: 10px;
-          color: var(--blue-700);
-          background: var(--white);
-        }
-
-        .status-info-card > span i {
-          width: 16px;
-          height: 16px;
-        }
-
-        .status-info-card strong {
-          display: block;
-          margin-bottom: 4px;
-          color: var(--blue-700);
-          font-size: 0.69rem;
-        }
-
-        .status-info-card p {
-          margin: 0;
-          color: #6d80a1;
-          font-size: 0.62rem;
-          line-height: 1.5;
         }
 
         .products-table-card {
@@ -2299,29 +2062,6 @@ export default function ProductosPage() {
         }
 
         @media (max-width: 1040px) {
-          .editor-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .preview-card {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-          }
-
-          .preview-title {
-            grid-column: 1 / -1;
-          }
-
-          .preview-stage {
-            height: 300px;
-            grid-row: span 3;
-          }
-
-          .preview-caption {
-            display: none;
-          }
-
           .installation-content {
             grid-template-columns: 1fr;
           }
@@ -2375,14 +2115,6 @@ export default function ProductosPage() {
             grid-template-columns: 1fr;
           }
 
-          .preview-card {
-            display: block;
-          }
-
-          .preview-stage {
-            height: 260px;
-          }
-
           .table-card-header {
             align-items: stretch;
             flex-direction: column;
@@ -2415,8 +2147,7 @@ export default function ProductosPage() {
             display: none;
           }
 
-          .product-form-card,
-          .preview-card {
+          .product-form-card {
             padding: 20px 16px;
             border-radius: 18px;
           }
