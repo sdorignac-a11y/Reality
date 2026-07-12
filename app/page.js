@@ -238,43 +238,341 @@ export default function HomePage() {
           display: none; width: 38px; height: 38px; place-items: center; border: 0;
           border-radius: 11px; background: var(--blue-100); color: var(--blue-700); cursor: pointer;
         }
-        .hero { position: relative; min-height: 540px; display: flex; align-items: center; padding: 56px 0 70px; isolation: isolate; }
+        .hero {
+          position: relative;
+          min-height: 680px;
+          display: flex;
+          align-items: center;
+          overflow: hidden;
+          padding: 72px 0 118px;
+          isolation: isolate;
+          background:
+            radial-gradient(circle at 50% 31%, rgba(255, 255, 255, 0.98) 0 22%, rgba(255, 255, 255, 0.5) 48%, transparent 71%),
+            linear-gradient(180deg, #f8fbff 0%, #f1f7ff 100%);
+        }
+
         .hero::before {
-          content: ""; position: absolute; z-index: -2; inset: 0;
-          background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.96) 0 23%, rgba(255, 255, 255, 0.3) 52%, transparent 70%);
+          content: "";
+          position: absolute;
+          z-index: 0;
+          top: 50px;
+          left: -115px;
+          width: 300px;
+          height: 300px;
+          border-radius: 50%;
+          background: rgba(193, 221, 255, 0.35);
+          box-shadow: 0 0 90px rgba(91, 157, 242, 0.08);
+          pointer-events: none;
         }
+
         .hero::after {
-          content: ""; position: absolute; z-index: -1; top: 23%; left: 50%; width: 520px; height: 520px;
-          border-radius: 50%; background: rgba(183, 216, 255, 0.18); filter: blur(18px); transform: translateX(-50%);
+          content: "";
+          position: absolute;
+          z-index: 0;
+          top: 115px;
+          left: 50%;
+          width: 760px;
+          height: 440px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.58);
+          filter: blur(34px);
+          transform: translateX(-50%);
+          pointer-events: none;
         }
-        .hero-content { position: relative; z-index: 4; max-width: 660px; margin: 0 auto; text-align: center; }
-        .hero h1 { margin-bottom: 16px; font-size: clamp(2.3rem, 5vw, 3.9rem); font-weight: 800; }
-        .hero h1 span { position: relative; display: inline-block; color: var(--blue-700); }
+
+        .hero-content {
+          position: relative;
+          z-index: 5;
+          width: min(800px, calc(100% - 32px));
+          max-width: 800px;
+          margin: 0 auto;
+          text-align: center;
+        }
+
+        .hero .eyebrow {
+          margin-bottom: 22px;
+          padding: 10px 17px;
+          border-color: rgba(35, 113, 229, 0.1);
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.95);
+          font-size: 0.86rem;
+          box-shadow: 0 10px 30px rgba(47, 94, 167, 0.08);
+        }
+
+        .hero .eyebrow i {
+          width: 19px;
+          height: 19px;
+        }
+
+        .hero h1 {
+          margin-bottom: 24px;
+          color: #14366f;
+          font-size: clamp(3.35rem, 5.5vw, 5.05rem);
+          font-weight: 800;
+          line-height: 0.96;
+          letter-spacing: -0.042em;
+        }
+
+        .hero h1 span {
+          position: relative;
+          display: block;
+          width: max-content;
+          max-width: 100%;
+          margin: 8px auto 0;
+          color: #176fe9;
+        }
+
         .hero h1 span::after {
-          content: ""; position: absolute; right: 4%; bottom: -5px; left: 5%; height: 10px;
-          border-top: 4px solid var(--blue-600); border-radius: 50%; transform: rotate(-1.5deg);
+          content: "";
+          position: absolute;
+          right: 3%;
+          bottom: -12px;
+          left: 4%;
+          height: 15px;
+          border-top: 5px solid #287ef0;
+          border-radius: 50%;
+          transform: rotate(-1deg);
         }
-        .hero-copy { max-width: 520px; margin: 0 auto 20px; font-size: clamp(0.94rem, 1.3vw, 1.02rem); color: var(--text); }
-        .hero-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin-bottom: 22px; }
-        .hero-actions .btn { min-width: 200px; }
-        .hero-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+        .hero-copy {
+          max-width: 660px;
+          margin: 0 auto 27px;
+          color: #536c96;
+          font-size: clamp(1rem, 1.3vw, 1.12rem);
+          line-height: 1.62;
+        }
+
+        .hero-actions {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          margin-bottom: 26px;
+        }
+
+        .hero-actions .btn {
+          min-width: 235px;
+          min-height: 53px;
+          border-radius: 15px;
+          font-size: 0.93rem;
+        }
+
+        .hero-actions .btn-primary {
+          background: linear-gradient(180deg, #3188f8 0%, #1267ec 100%);
+          box-shadow: 0 15px 30px rgba(28, 105, 228, 0.28);
+        }
+
+        .hero-actions .btn-secondary {
+          background: rgba(255, 255, 255, 0.96);
+          box-shadow: 0 11px 28px rgba(46, 87, 148, 0.09);
+        }
+
+        .hero-pills {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 10px;
+        }
+
         .micro-pill {
-          display: flex; align-items: center; gap: 6px; padding: 8px 11px;
-          border: 1px solid rgba(43, 121, 239, 0.11); border-radius: 12px; background: rgba(255, 255, 255, 0.86);
-          color: var(--blue-700); font-size: 0.74rem; font-weight: 900; box-shadow: var(--shadow-sm); backdrop-filter: blur(14px);
+          min-height: 46px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0 16px;
+          border: 1px solid rgba(43, 121, 239, 0.09);
+          border-radius: 14px;
+          color: var(--blue-700);
+          background: rgba(255, 255, 255, 0.93);
+          font-size: 0.78rem;
+          font-weight: 900;
+          box-shadow: 0 10px 28px rgba(43, 89, 160, 0.08);
+          backdrop-filter: blur(14px);
         }
-        .micro-pill i { width: 14px; height: 14px; }
 
-        .hero-furniture {
-          position: absolute; z-index: 1; bottom: 50px; width: min(22vw, 270px);
-          pointer-events: none; filter: drop-shadow(0 22px 24px rgba(35, 68, 120, 0.16));
+        .micro-pill i {
+          width: 19px;
+          height: 19px;
         }
-        .hero-chair { left: -10px; transform: rotate(-1deg); animation: float 5.5s ease-in-out infinite; }
-        .hero-sofa { right: -20px; width: min(27vw, 340px); transform: rotate(1deg); animation: float 5.5s ease-in-out infinite; animation-delay: -2.2s; }
 
-        .orbit { position: absolute; z-index: 2; width: 95px; height: 95px; border: 2px dashed rgba(45, 124, 242, 0.55); border-radius: 50%; pointer-events: none; }
-        .orbit-left { left: 5%; bottom: 190px; border-right-color: transparent; border-bottom-color: transparent; transform: rotate(10deg); }
-        .orbit-right { right: 8%; bottom: 160px; border-left-color: transparent; border-bottom-color: transparent; transform: rotate(-12deg); }
+        .hero-scene {
+          position: absolute;
+          z-index: 2;
+          bottom: 91px;
+          width: clamp(250px, 23vw, 380px);
+          pointer-events: none;
+          filter: drop-shadow(0 24px 30px rgba(37, 77, 132, 0.12));
+        }
+
+        .hero-scene img {
+          width: 100%;
+          height: auto;
+          display: block;
+        }
+
+        .hero-scene-left {
+          left: max(-5px, calc((100vw - 1540px) / 2));
+        }
+
+        .hero-scene-right {
+          right: max(-5px, calc((100vw - 1540px) / 2));
+          width: clamp(270px, 24vw, 400px);
+        }
+
+        .hero-dots {
+          position: absolute;
+          z-index: 1;
+          top: 105px;
+          right: 1.8%;
+          width: 132px;
+          height: 82px;
+          opacity: 0.5;
+          background-image: radial-gradient(circle, #6ca5f1 2.3px, transparent 2.6px);
+          background-size: 24px 24px;
+          pointer-events: none;
+        }
+
+        .hero-wave {
+          position: absolute;
+          z-index: 3;
+          right: 0;
+          bottom: -1px;
+          left: 0;
+          width: 100%;
+          height: 72px;
+          pointer-events: none;
+        }
+
+        .hero-wave path {
+          fill: #ffffff;
+        }
+
+        @media (max-width: 1220px) {
+          .hero {
+            min-height: 650px;
+          }
+
+          .hero-content {
+            max-width: 720px;
+          }
+
+          .hero h1 {
+            font-size: clamp(3.1rem, 5.7vw, 4.55rem);
+          }
+
+          .hero-scene {
+            bottom: 80px;
+            width: clamp(220px, 24vw, 300px);
+            opacity: 0.92;
+          }
+
+          .hero-scene-right {
+            width: clamp(235px, 25vw, 320px);
+          }
+        }
+
+        @media (max-width: 930px) {
+          .hero {
+            min-height: 620px;
+            padding-top: 64px;
+          }
+
+          .hero-content {
+            max-width: 680px;
+          }
+
+          .hero-scene {
+            bottom: 50px;
+            width: 225px;
+            opacity: 0.23;
+          }
+
+          .hero-scene-left {
+            left: -65px;
+          }
+
+          .hero-scene-right {
+            right: -75px;
+            width: 245px;
+          }
+
+          .hero-dots {
+            display: none;
+          }
+        }
+
+        @media (max-width: 620px) {
+          .hero {
+            min-height: 650px;
+            padding: 55px 0 105px;
+          }
+
+          .hero::before {
+            width: 210px;
+            height: 210px;
+          }
+
+          .hero .eyebrow {
+            margin-bottom: 18px;
+            padding: 8px 12px;
+            font-size: 0.74rem;
+          }
+
+          .hero h1 {
+            margin-bottom: 22px;
+            font-size: clamp(2.7rem, 13vw, 3.75rem);
+            line-height: 0.98;
+          }
+
+          .hero h1 span {
+            margin-top: 6px;
+          }
+
+          .hero h1 span::after {
+            bottom: -9px;
+            border-top-width: 4px;
+          }
+
+          .hero-copy {
+            font-size: 0.95rem;
+          }
+
+          .hero-actions {
+            display: grid;
+            width: 100%;
+          }
+
+          .hero-actions .btn {
+            width: min(100%, 340px);
+            min-width: 0;
+            margin-inline: auto;
+          }
+
+          .hero-pills {
+            gap: 7px;
+          }
+
+          .micro-pill {
+            min-height: 40px;
+            padding: 0 11px;
+            font-size: 0.7rem;
+          }
+
+          .micro-pill i {
+            width: 16px;
+            height: 16px;
+          }
+
+          .hero-scene {
+            display: none;
+          }
+
+          .hero-wave {
+            height: 48px;
+          }
+        }
+
         .comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
         .comparison-card { position: relative; overflow: hidden; min-height: 270px; padding: 18px; border-radius: 20px; border: 1px solid rgba(40, 95, 178, 0.08); box-shadow: var(--shadow-sm); }
         .comparison-card.bad { background: linear-gradient(135deg, rgba(255, 249, 250, 0.97), rgba(255, 242, 245, 0.88)), #fff; }
@@ -380,7 +678,6 @@ export default function HomePage() {
         @media (max-width: 1020px) {
           .nav-links { gap: 18px; }
           .hero { min-height: 480px; }
-          .hero-furniture { opacity: 0.52; }
           .comparison-top { grid-template-columns: 1fr; }
           .comparison-image { height: 170px; }
           .demo-layout { grid-template-columns: 1fr; }
@@ -398,7 +695,6 @@ export default function HomePage() {
           .navbar > .btn { display: none; }
           .menu-button { display: grid; }
           .hero { padding-top: 60px; }
-          .hero-furniture { bottom: 10px; opacity: 0.2; }
           .comparison-grid, .steps { grid-template-columns: 1fr; }
           .steps { gap: 30px; }
           .section-card { padding: 26px 18px; }
@@ -421,8 +717,6 @@ export default function HomePage() {
           .hero-actions .btn { width: min(100%, 300px); min-width: 0; }
           .hero-pills { gap: 6px; }
           .micro-pill { padding: 7px 9px; font-size: 0.68rem; }
-          .hero-chair { left: -60px; }
-          .hero-sofa { right: -80px; }
           .comparison-card { min-height: 0; padding: 14px; }
           .comparison-image { height: 150px; }
           .benefits-grid { grid-template-columns: 1fr; }
@@ -459,33 +753,29 @@ export default function HomePage() {
 
       <main>
         <section className="hero" id="inicio">
-          <div className="orbit orbit-left"></div>
-          <div className="orbit orbit-right"></div>
+          <div className="hero-dots" aria-hidden="true"></div>
 
-          <svg className="hero-furniture hero-chair" viewBox="0 0 390 360" aria-hidden="true">
-            <ellipse cx="195" cy="324" rx="150" ry="24" fill="rgba(31,67,119,.10)" />
-            <path d="M90 132C90 82 123 48 170 48h50c47 0 80 34 80 84v82H90z" fill="#86b6ed" />
-            <rect x="64" y="175" width="262" height="116" rx="46" fill="#6fa4e6" />
-            <rect x="77" y="190" width="236" height="89" rx="39" fill="#7aade8" />
-            <rect x="54" y="158" width="74" height="142" rx="34" fill="#689be0" />
-            <rect x="262" y="158" width="74" height="142" rx="34" fill="#689be0" />
-            <path d="M94 287h32l-12 60H83zM264 287h32l11 60h-31z" fill="#c6ad87" />
-            <path d="M134 69c20-9 101-9 121 0" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="6" strokeLinecap="round" />
-          </svg>
+          <div className="hero-scene hero-scene-left" aria-hidden="true">
+            <img
+              src="/reality-hero-left.png"
+              alt=""
+              width="360"
+              height="365"
+              loading="eager"
+            />
+          </div>
 
-          <svg className="hero-furniture hero-sofa" viewBox="0 0 520 360" aria-hidden="true">
-            <ellipse cx="260" cy="326" rx="212" ry="24" fill="rgba(31,67,119,.10)" />
-            <rect x="78" y="122" width="364" height="153" rx="48" fill="#d6dbe2" />
-            <rect x="54" y="176" width="412" height="119" rx="42" fill="#c9cfd8" />
-            <rect x="54" y="155" width="83" height="145" rx="34" fill="#c0c7d1" />
-            <rect x="383" y="155" width="83" height="145" rx="34" fill="#c0c7d1" />
-            <rect x="124" y="182" width="130" height="92" rx="25" fill="#dce1e7" />
-            <rect x="266" y="182" width="130" height="92" rx="25" fill="#dce1e7" />
-            <path d="M112 291h32l-7 43h-32zM376 291h32l8 43h-32z" fill="#c3a67f" />
-            <rect x="299" y="140" width="88" height="72" rx="18" fill="#8fbdef" />
-          </svg>
+          <div className="hero-scene hero-scene-right" aria-hidden="true">
+            <img
+              src="/reality-hero-right.png"
+              alt=""
+              width="380"
+              height="350"
+              loading="eager"
+            />
+          </div>
 
-          <div className="container hero-content reveal">
+          <div className="hero-content reveal">
             <div className="eyebrow">
               <i data-lucide="sparkles"></i>
               Realidad aumentada para mueblerías
@@ -493,7 +783,7 @@ export default function HomePage() {
 
             <h1>
               Tus clientes prueban los muebles en su casa
-              <span> antes de comprar</span>
+              <span>antes de comprar</span>
             </h1>
 
             <p className="hero-copy">
@@ -506,6 +796,7 @@ export default function HomePage() {
                 Quiero ser mueblería piloto
                 <i data-lucide="arrow-right"></i>
               </a>
+
               <a className="btn btn-secondary" href="#demo">
                 <i data-lucide="play-circle"></i>
                 Ver cómo funciona
@@ -513,12 +804,33 @@ export default function HomePage() {
             </div>
 
             <div className="hero-pills">
-              <span className="micro-pill"><i data-lucide="smartphone"></i> Sin apps</span>
-              <span className="micro-pill"><i data-lucide="ruler"></i> Escala real</span>
-              <span className="micro-pill"><i data-lucide="code-2"></i> Fácil de integrar</span>
-              <span className="micro-pill"><i data-lucide="zap"></i> Listo en minutos</span>
+              <span className="micro-pill">
+                <i data-lucide="smartphone"></i>
+                Sin apps
+              </span>
+              <span className="micro-pill">
+                <i data-lucide="ruler"></i>
+                Escala real
+              </span>
+              <span className="micro-pill">
+                <i data-lucide="code-2"></i>
+                Fácil de integrar
+              </span>
+              <span className="micro-pill">
+                <i data-lucide="zap"></i>
+                Listo en minutos
+              </span>
             </div>
           </div>
+
+          <svg
+            className="hero-wave"
+            viewBox="0 0 1440 80"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path d="M0,48 C180,12 310,73 520,54 C710,37 822,18 1030,52 C1200,79 1320,31 1440,45 L1440,80 L0,80 Z" />
+          </svg>
         </section>
 
         <section className="section" id="problema">
