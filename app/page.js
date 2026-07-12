@@ -66,11 +66,38 @@ export default function HomePage() {
     document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
 
     const pilotForm = document.getElementById('pilotForm');
-    function handlePilotSubmit(event) {
+    async function handlePilotSubmit(event) {
       event.preventDefault();
+
       const businessName = document.getElementById('businessName').value.trim();
-      showToast('Solicitud enviada', `${businessName || 'Tu mueblería'} quedó registrada para la prueba piloto.`);
-      event.currentTarget.reset();
+      const contactEmail = document.getElementById('contactEmail').value.trim();
+      const website = document.getElementById('website').value.trim();
+
+      const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+      const originalLabel = submitButton.innerHTML;
+      submitButton.disabled = true;
+      submitButton.textContent = 'Enviando…';
+
+      try {
+        const res = await fetch('/api/pilot-lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ businessName, contactEmail, website }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          throw new Error(data.error || 'No se pudo enviar');
+        }
+
+        showToast('Solicitud enviada', `${businessName || 'Tu mueblería'} quedó registrada para la prueba piloto.`);
+        event.currentTarget.reset();
+      } catch (err) {
+        showToast('No se pudo enviar', 'Revisá los datos e intentá de nuevo en un momento.');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalLabel;
+      }
     }
     pilotForm.addEventListener('submit', handlePilotSubmit);
 
