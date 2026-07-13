@@ -56,3 +56,5 @@ export default function SitioPage() {
     </main>
   );
 }
+<script src="https://cutzstudio.vercel.app/widget.js"></script>
+<div data-ebano-auto data-store="1632b6d9-af04-427e-a8ef-444df1773699"></div>
