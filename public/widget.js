@@ -1025,7 +1025,7 @@
       snap.setAttribute('environment-image', 'neutral');
       snap.setAttribute('camera-orbit', '35deg 75deg auto');
       snap.setAttribute('shadow-intensity', '0');
-      snap.style.cssText = 'position:fixed;left:-9999px;top:0;width:640px;height:640px;background:#fff;';
+      snap.style.cssText = 'position:fixed;top:0;left:0;width:640px;height:640px;background:#fff;opacity:0.01;pointer-events:none;z-index:-1;';
       overlay._root.appendChild(snap);
 
       function failCapture(err) {
@@ -1055,8 +1055,8 @@
       }
 
       snap.addEventListener('error', failCapture);
-      snap.addEventListener('load', function () { setTimeout(cleanupAndCapture, 350); });
-      setTimeout(cleanupAndCapture, 4000); // por si el evento load no llega
+      snap.addEventListener('load', function () { setTimeout(cleanupAndCapture, 600); });
+      setTimeout(cleanupAndCapture, 5000); // por si el evento load no llega
     }).catch(function () {
       buttonEl.disabled = false;
       buttonEl.innerHTML = originalLabel;
