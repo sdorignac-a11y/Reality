@@ -1271,7 +1271,7 @@ export default function ProductosPage() {
                       <span className="drop-copy">
                         <strong>
                           {photoFiles.length
-                            ? `${photoFiles.length} foto(s) seleccionada(s)`
+                            ? `${photoFiles.length} de 4 fotos — tocá para agregar más`
                             : 'Subí 2 a 4 fotos del mueble'}
                         </strong>
                         <small>Desde ángulos distintos: frente, costado, atrás</small>
@@ -1284,10 +1284,39 @@ export default function ProductosPage() {
                       type="file"
                       accept="image/*"
                       multiple
-                      onChange={(event) =>
-                        setPhotoFiles(Array.from(event.target.files || []).slice(0, 4))
-                      }
+                      onChange={(event) => {
+                        const newFiles = Array.from(event.target.files || []);
+                        setPhotoFiles((current) =>
+                          [...current, ...newFiles].slice(0, 4)
+                        );
+                        // Vaciamos el input para poder volver a elegir la
+                        // misma foto si hace falta (si no, el navegador no
+                        // dispara onChange de nuevo con el mismo archivo).
+                        event.target.value = '';
+                      }}
                     />
+
+                    {photoFiles.length > 0 && (
+                      <div className="photo-preview-grid">
+                        {photoFiles.map((photo, i) => (
+                          <div className="photo-preview-item" key={i}>
+                            <img src={URL.createObjectURL(photo)} alt="" />
+                            <button
+                              type="button"
+                              className="photo-remove-button"
+                              onClick={() =>
+                                setPhotoFiles((current) =>
+                                  current.filter((_, idx) => idx !== i)
+                                )
+                              }
+                              aria-label="Quitar foto"
+                            >
+                              <i data-lucide="x"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <button
                       type="button"
@@ -2563,6 +2592,48 @@ export default function ProductosPage() {
           background: var(--blue-50);
         }
 
+        .photo-preview-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .photo-preview-item {
+          position: relative;
+          aspect-ratio: 1;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+        }
+
+        .photo-preview-item img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .photo-remove-button {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          width: 20px;
+          height: 20px;
+          display: grid;
+          place-items: center;
+          border: 0;
+          border-radius: 50%;
+          color: var(--white);
+          background: rgba(20, 30, 50, 0.62);
+          cursor: pointer;
+        }
+
+        .photo-remove-button i {
+          width: 11px;
+          height: 11px;
+        }
+
         .generate-button {
           width: 100%;
           min-height: 44px;
@@ -3237,6 +3308,10 @@ export default function ProductosPage() {
             width: 100%;
             padding-left: 38px;
             margin-top: -6px;
+          }
+
+          .photo-preview-grid {
+            grid-template-columns: repeat(4, 1fr);
           }
         }
       `}</style>
