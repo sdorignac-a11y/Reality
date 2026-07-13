@@ -1148,12 +1148,7 @@ export default function ProductosPage() {
               </div>
 
               <label className="field slug-field">
-                <span>
-                  Slug
-                  <small>
-                    Tiene que ser igual al de la URL del producto
-                  </small>
-                </span>
+                <span>Slug</span>
 
                 <div className="input-control">
                   <i data-lucide="link-2"></i>
@@ -1168,12 +1163,6 @@ export default function ProductosPage() {
                     required
                   />
                 </div>
-
-                <p className="field-help">
-                  Si la ficha del producto es
-                  <code> /productos/{form.slug || 'sillon-estocolmo'}</code>,
-                  el slug tiene que ser exactamente ese.
-                </p>
               </label>
 
               <div className="form-grid measurements-grid">
@@ -2354,6 +2343,7 @@ export default function ProductosPage() {
 
         .top-fields {
           grid-template-columns: 1.55fr 0.85fr;
+          align-items: end;
         }
 
         .measurements-grid {
@@ -2385,8 +2375,10 @@ export default function ProductosPage() {
           position: relative;
         }
 
-        .input-control > i {
+        .input-control > i,
+        .input-control > svg {
           position: absolute;
+          z-index: 1;
           top: 50%;
           left: 13px;
           width: 16px;
@@ -2705,7 +2697,7 @@ export default function ProductosPage() {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 10px;
+          gap: 18px;
         }
 
         .search-control,
@@ -2716,19 +2708,24 @@ export default function ProductosPage() {
         }
 
         .search-control > i,
-        .filter-control > i {
+        .search-control > svg,
+        .filter-control > i,
+        .filter-control > svg {
           position: absolute;
-          left: 12px;
-          width: 15px;
-          height: 15px;
+          z-index: 1;
+          top: 50%;
+          left: 13px;
+          width: 16px;
+          height: 16px;
           color: #8291aa;
+          transform: translateY(-50%);
           pointer-events: none;
         }
 
         .search-control input {
-          width: 255px;
+          width: 280px;
           height: 39px;
-          padding: 0 14px 0 38px;
+          padding: 0 16px 0 42px;
           border: 1px solid #dce5f2;
           border-radius: 12px;
           outline: none;
@@ -2738,8 +2735,9 @@ export default function ProductosPage() {
         }
 
         .filter-control select {
+          min-width: 150px;
           height: 39px;
-          padding: 0 30px 0 36px;
+          padding: 0 34px 0 42px;
           border: 1px solid #dce5f2;
           border-radius: 12px;
           outline: none;
