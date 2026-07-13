@@ -1020,12 +1020,22 @@
     ensureModelViewer().then(function () {
       var snap = document.createElement('model-viewer');
       snap.setAttribute('src', product.model_url);
+      snap.setAttribute('crossorigin', 'anonymous');
       snap.setAttribute('exposure', '1');
       snap.setAttribute('environment-image', 'neutral');
       snap.setAttribute('camera-orbit', '35deg 75deg auto');
       snap.setAttribute('shadow-intensity', '0');
       snap.style.cssText = 'position:fixed;left:-9999px;top:0;width:640px;height:640px;background:#fff;';
       overlay._root.appendChild(snap);
+
+      function failCapture() {
+        snap.remove();
+        buttonEl.disabled = false;
+        buttonEl.innerHTML = originalLabel;
+        var recBanner = overlay.querySelector('#recBanner');
+        recBanner.textContent = 'No se pudo preparar la foto del mueble. Probá de nuevo en un momento.';
+        recBanner.classList.add('show');
+      }
 
       var settled = false;
       function cleanupAndCapture() {
@@ -1038,12 +1048,17 @@
             var productBase64 = ev.target.result.split(',')[1];
             callGenerateApi(overlay, product, productBase64, buttonEl, originalLabel);
           };
+          reader.onerror = failCapture;
           reader.readAsDataURL(blob);
-        });
+        }).catch(failCapture);
       }
 
+      snap.addEventListener('error', failCapture);
       snap.addEventListener('load', function () { setTimeout(cleanupAndCapture, 350); });
       setTimeout(cleanupAndCapture, 4000); // por si el evento load no llega
+    }).catch(function () {
+      buttonEl.disabled = false;
+      buttonEl.innerHTML = originalLabel;
     });
   }
 
