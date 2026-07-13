@@ -53,7 +53,16 @@ export async function POST(req) {
     }
 
     const data = await falRes.json();
-    return cors(json({ requestId: data.request_id }, 200));
+    return cors(
+      json(
+        {
+          requestId: data.request_id,
+          statusUrl: data.status_url,
+          resultUrl: data.response_url,
+        },
+        200
+      )
+    );
   } catch (err) {
     return cors(json({ error: err.message }, 500));
   }
