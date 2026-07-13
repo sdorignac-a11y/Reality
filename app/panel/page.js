@@ -599,6 +599,7 @@ export default function ProductosPage() {
       }
 
       const payload = {
+        owner_id: editingProduct?.owner_id || user?.id,
         name: form.name.trim(),
         price: form.price.trim().startsWith('$') ? form.price.trim() : `$ ${form.price.trim()}`,
         slug: form.slug.trim(),
