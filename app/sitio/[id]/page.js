@@ -1,12 +1,54 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Script from 'next/script';
 import { supabase } from '../../../lib/supabaseClient';
+
+// Corrige la escala del modelo 3D para que coincida con las medidas reales
+// cargadas en el producto (alto/ancho/fondo en cm) — sin esto, el tamaño en
+// AR depende únicamente de cómo haya salido escalado el archivo .glb, que
+// puede no tener nada que ver con las medidas reales del mueble.
+function applyRealScale(modelViewer, alto, ancho, fondo) {
+  function doScale() {
+    try {
+      const dims = modelViewer.getDimensions();
+      const current = modelViewer.scale || { x: 1, y: 1, z: 1 };
+
+      const baseX = dims.x / (current.x || 1);
+      const baseY = dims.y / (current.y || 1);
+      const baseZ = dims.z / (current.z || 1);
+
+      const targetX = (Number(ancho) || 0) / 100;
+      const targetY = (Number(alto) || 0) / 100;
+      const targetZ = (Number(fondo) || 0) / 100;
+
+      const ratios = [];
+      if (baseX > 0 && targetX > 0) ratios.push(targetX / baseX);
+      if (baseY > 0 && targetY > 0) ratios.push(targetY / baseY);
+      if (baseZ > 0 && targetZ > 0) ratios.push(targetZ / baseZ);
+
+      if (!ratios.length) return;
+
+      const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+      if (!isFinite(avg) || avg <= 0) return;
+
+      modelViewer.setAttribute('scale', `${avg} ${avg} ${avg}`);
+    } catch (e) {
+      // si algo falla, dejamos el modelo con su escala original
+    }
+  }
+
+  modelViewer.addEventListener('load', doScale);
+  if (modelViewer.loaded) doScale();
+
+  return () => modelViewer.removeEventListener('load', doScale);
+}
+
 export default function ProductPage() {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const viewerRef = useRef(null);
   useEffect(() => {
     supabase
       .from('products')
@@ -19,6 +61,11 @@ export default function ProductPage() {
         setLoading(false);
       });
   }, [id]);
+
+  useEffect(() => {
+    if (!product || !viewerRef.current) return;
+    return applyRealScale(viewerRef.current, product.alto, product.ancho, product.fondo);
+  }, [product]);
   if (loading) return <main style={{ padding: '60px 6vw' }}>Cargando…</main>;
   if (!product) return <main style={{ padding: '60px 6vw' }}>Producto no encontrado (o todavía no está publicado).</main>;
   return (
@@ -35,6 +82,7 @@ export default function ProductPage() {
       }}>
         {/* eslint-disable-next-line react/no-unknown-property */}
         <model-viewer
+          ref={viewerRef}
           src={product.model_url}
           camera-controls
           auto-rotate
