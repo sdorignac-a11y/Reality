@@ -1,11 +1,11 @@
 // app/api/photo-to-3d/status/route.js
 //
-// Recibe (query param): ?request_id=...
+// Recibe (query params): ?status_url=...&result_url=...
+// (se los pasamos tal cual como nos los dio fal.ai al arrancar la generación)
+//
 // Devuelve: { status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED", modelUrl? }
 //
 // El panel llama a esta ruta cada pocos segundos hasta que status sea "COMPLETED".
-
-const MODEL_ID = 'tripo3d/h3.1/multiview-to-3d';
 
 import { verifySupabaseUser } from '../../../../lib/rateLimit';
 
@@ -17,16 +17,16 @@ export async function GET(req) {
     }
 
     const { searchParams } = new URL(req.url);
-    const requestId = searchParams.get('request_id');
+    const statusUrl = searchParams.get('status_url');
+    const resultUrl = searchParams.get('result_url');
 
-    if (!requestId) {
-      return cors(json({ error: 'Falta request_id' }, 400));
+    if (!statusUrl || !resultUrl) {
+      return cors(json({ error: 'Faltan status_url o result_url' }, 400));
     }
 
-    const statusRes = await fetch(
-      `https://queue.fal.run/${MODEL_ID}/requests/${requestId}/status`,
-      { headers: { Authorization: 'Key ' + process.env.FAL_KEY } }
-    );
+    const statusRes = await fetch(statusUrl, {
+      headers: { Authorization: 'Key ' + process.env.FAL_KEY },
+    });
 
     if (!statusRes.ok) {
       const errText = await statusRes.text();
@@ -39,14 +39,13 @@ export async function GET(req) {
       return cors(json({ status: statusData.status }, 200));
     }
 
-    const resultRes = await fetch(
-      `https://queue.fal.run/${MODEL_ID}/requests/${requestId}`,
-      { headers: { Authorization: 'Key ' + process.env.FAL_KEY } }
-    );
+    const resultRes = await fetch(resultUrl, {
+      headers: { Authorization: 'Key ' + process.env.FAL_KEY },
+    });
 
     if (!resultRes.ok) {
       const errText = await resultRes.text();
-      return cors(json({ error: 'Error obteniendo el resultado: ' + errText }, 500));
+      return cors(json({ error: `Error obteniendo el resultado (código ${resultRes.status}): ${errText || '(sin detalle del servidor)'}` }, 500));
     }
 
     const resultData = await resultRes.json();
