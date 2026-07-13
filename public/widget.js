@@ -55,6 +55,14 @@
   // el tamaño en AR depende únicamente de cómo haya salido escalado el
   // archivo .glb, que puede no tener nada que ver con las medidas reales.
   function applyRealScale(modelViewer, alto, ancho, fondo) {
+    // Si este visor ya tenía un escuchador de una vez anterior, lo sacamos
+    // primero — si no, se van acumulando uno por cada producto que se vio,
+    // y todos terminan disparando juntos y pisándose entre sí.
+    if (modelViewer.__realityDoScale) {
+      modelViewer.removeEventListener('load', modelViewer.__realityDoScale);
+      modelViewer.__realityDoScale = null;
+    }
+
     function doScale() {
       try {
         var dims = modelViewer.getDimensions();
@@ -83,6 +91,8 @@
         // si algo falla, dejamos el modelo con su escala original
       }
     }
+
+    modelViewer.__realityDoScale = doScale;
 
     modelViewer.addEventListener('load', doScale);
     if (modelViewer.loaded) doScale();
