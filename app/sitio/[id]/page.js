@@ -1,14 +1,12 @@
 'use client';
-
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Script from 'next/script';
 import { supabase } from '../../../lib/supabaseClient';
-
 export default function ProductPage() {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     supabase
       .from('products')
@@ -21,10 +19,8 @@ export default function ProductPage() {
         setLoading(false);
       });
   }, [id]);
-
   if (loading) return <main style={{ padding: '60px 6vw' }}>Cargando…</main>;
   if (!product) return <main style={{ padding: '60px 6vw' }}>Producto no encontrado (o todavía no está publicado).</main>;
-
   return (
     <main style={{ padding: '40px 6vw', maxWidth: 700 }}>
       <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: 26 }}>{product.name}</div>
@@ -32,7 +28,6 @@ export default function ProductPage() {
       <div className="mono" style={{ fontSize: 12, color: '#8a8375', marginTop: 6 }}>
         {product.alto} × {product.ancho} × {product.fondo} cm
       </div>
-
       <div style={{
         marginTop: 24, height: 380, borderRadius: 4, overflow: 'hidden',
         background: 'linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px),#fbfaf6',
@@ -49,7 +44,6 @@ export default function ProductPage() {
           camera-orbit="35deg 78deg 2.6m"
           ar
           ar-modes="webxr scene-viewer quick-look"
-ar-modes="webxr scene-viewer quick-look"
           ar-scale="fixed"
           style={{ width: '100%', height: '100%' }}
         >
@@ -61,10 +55,16 @@ ar-modes="webxr scene-viewer quick-look"
           </button>
         </model-viewer>
       </div>
-
       <p style={{ fontSize: 11.5, color: '#8a8375', marginTop: 12 }}>
         Desde el celular, el botón abre la cámara real. Desde notebook solo se ve el modelo 3D interactivo.
       </p>
+
+      {/* Widget de Reality — mismo código que le damos a un cliente real,
+          en modo manual: le decimos directo qué producto es (por id),
+          así no depende de que el slug coincida con la URL. */}
+      <Script src="https://cutzstudio.vercel.app/widget.js" strategy="afterInteractive" />
+      {/* eslint-disable-next-line react/no-unknown-property */}
+      <div data-ebano-product={product.id} data-store={product.owner_id}></div>
     </main>
   );
 }
