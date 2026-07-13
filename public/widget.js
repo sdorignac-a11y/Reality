@@ -1028,7 +1028,8 @@
       snap.style.cssText = 'position:fixed;left:-9999px;top:0;width:640px;height:640px;background:#fff;';
       overlay._root.appendChild(snap);
 
-      function failCapture() {
+      function failCapture(err) {
+        console.error('[Reality widget] No se pudo capturar el modelo 3D para generar la imagen:', err);
         snap.remove();
         buttonEl.disabled = false;
         buttonEl.innerHTML = originalLabel;
