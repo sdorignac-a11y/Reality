@@ -585,6 +585,7 @@
       '}',
 
       '.frame{',
+      '  position:relative;',
       '  width:100%;',
       '  height:280px;',
       '  background:#FFFFFF;',
@@ -611,45 +612,44 @@
       '  margin:10px;',
       '}',
 
-      '.dim-hotspot{',
-      '  border:none;',
-      '  background:none;',
-      '  padding:0;',
-      '  cursor:default;',
+      '.dim-anchor{',
       '  display:none;',
       '}',
 
-      '.overlay.showing-dims .dim-hotspot{',
+      '.dim-svg{',
+      '  position:absolute;',
+      '  inset:0;',
+      '  width:100%;',
+      '  height:100%;',
+      '  pointer-events:none;',
+      '  display:none;',
+      '}',
+
+      '.overlay.showing-dims .dim-svg{',
       '  display:block;',
       '}',
 
-      '.dim-pill{',
-      '  position:relative;',
-      '  display:inline-flex;',
-      '  align-items:center;',
-      '  gap:4px;',
-      '  padding:4px 9px;',
-      '  border-radius:999px;',
-      '  background:#3D2A1B;',
-      '  color:#FFF7ED;',
-      '  font-size:10.5px;',
-      '  font-weight:800;',
-      '  white-space:nowrap;',
-      '  box-shadow:0 4px 10px rgba(0,0,0,.22);',
+      '.dim-svg line{',
+      '  stroke:#6B4A32;',
+      '  stroke-width:1.5;',
       '}',
 
-      '.dim-pill:before{',
-      '  content:"";',
-      '  position:absolute;',
-      '  top:50%;',
-      '  left:-4px;',
-      '  width:8px;',
-      '  height:8px;',
-      '  border-radius:50%;',
-      '  background:#3D2A1B;',
-      '  border:2px solid #FFF7ED;',
-      '  box-shadow:0 0 0 1px rgba(0,0,0,.35);',
-      '  transform:translate(-50%,-50%);',
+      '.dim-svg .dim-tick{',
+      '  stroke:#6B4A32;',
+      '  stroke-width:1.5;',
+      '}',
+
+      '.dim-svg text{',
+      '  font-family:"Nunito",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+      '  font-size:11px;',
+      '  font-weight:800;',
+      '  fill:#3D2A1B;',
+      '}',
+
+      '.dim-svg .dim-label-bg{',
+      '  fill:#FFF7ED;',
+      '  stroke:#DCC8A9;',
+      '  stroke-width:1;',
       '}',
 
       '.dims-toggle{',
@@ -1174,16 +1174,14 @@
       '      <button slot="ar-button" class="ar-btn">' +
       '        Ver en tu espacio' +
       '      </button>' +
-      '      <button slot="hotspot-alto" class="dim-hotspot dim-alto" data-position="0 0 0" data-normal="0 0 1">' +
-      '        <span class="dim-pill">↕ <span class="dim-value" id="dimAlto"></span></span>' +
-      '      </button>' +
-      '      <button slot="hotspot-ancho" class="dim-hotspot dim-ancho" data-position="0 0 0" data-normal="0 -1 0">' +
-      '        <span class="dim-pill">↔ <span class="dim-value" id="dimAncho"></span></span>' +
-      '      </button>' +
-      '      <button slot="hotspot-fondo" class="dim-hotspot dim-fondo" data-position="0 0 0" data-normal="1 0 0">' +
-      '        <span class="dim-pill">⤢ <span class="dim-value" id="dimFondo"></span></span>' +
-      '      </button>' +
+      '      <span slot="hotspot-alto-top" class="dim-anchor" data-position="0 0 0"></span>' +
+      '      <span slot="hotspot-alto-bottom" class="dim-anchor" data-position="0 0 0"></span>' +
+      '      <span slot="hotspot-ancho-left" class="dim-anchor" data-position="0 0 0"></span>' +
+      '      <span slot="hotspot-ancho-right" class="dim-anchor" data-position="0 0 0"></span>' +
+      '      <span slot="hotspot-fondo-near" class="dim-anchor" data-position="0 0 0"></span>' +
+      '      <span slot="hotspot-fondo-far" class="dim-anchor" data-position="0 0 0"></span>' +
       '    </model-viewer>' +
+      '    <svg class="dim-svg" id="dimSvg"></svg>' +
       '  </div>' +
       '  <button class="dims-toggle" id="dimsToggle">Ver medidas sobre el mueble</button>' +
       '  <p class="hint">' +
@@ -1198,11 +1196,13 @@
       .querySelector('.close')
       .addEventListener('click', function () {
         overlay.classList.remove('open');
+        stopDimensionTracking(overlay, overlay.querySelector('#arViewer'));
       });
 
     overlay.addEventListener('click', function (event) {
       if (event.target === overlay) {
         overlay.classList.remove('open');
+        stopDimensionTracking(overlay, overlay.querySelector('#arViewer'));
       }
     });
 
@@ -1217,16 +1217,20 @@
           : 'Ver medidas sobre el mueble';
 
         if (showing) {
-          placeMeasurementHotspots(viewer, overlay._currentProduct);
+          placeMeasurementAnchors(viewer, overlay._currentProduct);
+          startDimensionTracking(overlay, viewer);
+        } else {
+          stopDimensionTracking(overlay, viewer);
         }
       });
 
     return overlay;
   }
 
-  // Ubica las 3 etiquetas de medida (alto/ancho/fondo) sobre las esquinas
-  // reales del mueble, usando el tamaño ya corregido por applyRealScale.
-  function placeMeasurementHotspots(viewer, product) {
+  // Ubica las 6 anclas invisibles (dos puntas por cada medida: alto,
+  // ancho y fondo) sobre las esquinas reales del mueble, usando el
+  // tamaño ya corregido por applyRealScale.
+  function placeMeasurementAnchors(viewer, product) {
     if (!viewer || !product) return;
 
     try {
@@ -1237,36 +1241,96 @@
       var hy = dims.y / 2;
       var hz = dims.z / 2;
 
-      var altoHotspot = viewer.querySelector('[slot="hotspot-alto"]');
-      var anchoHotspot = viewer.querySelector('[slot="hotspot-ancho"]');
-      var fondoHotspot = viewer.querySelector('[slot="hotspot-fondo"]');
+      var points = {
+        'hotspot-alto-top': (center.x - hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
+        'hotspot-alto-bottom': (center.x - hx) + ' ' + (center.y - hy) + ' ' + (center.z + hz),
+        'hotspot-ancho-left': (center.x - hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
+        'hotspot-ancho-right': (center.x + hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
+        'hotspot-fondo-near': (center.x + hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
+        'hotspot-fondo-far': (center.x + hx) + ' ' + (center.y + hy) + ' ' + (center.z - hz)
+      };
 
-      // Alto: arriba, atrás a la izquierda — lejos de las otras dos
-      var altoPos = (center.x - hx) + ' ' + (center.y + hy) + ' ' + (center.z - hz);
-      altoHotspot.setAttribute('data-position', altoPos);
-      altoHotspot.setAttribute('data-normal', '-1 0 0');
-      altoHotspot.querySelector('.dim-value').textContent = product.alto + ' cm';
+      Object.keys(points).forEach(function (name) {
+        var el = viewer.querySelector('[slot="' + name + '"]');
+        if (el) el.setAttribute('data-position', points[name]);
+        if (viewer.updateHotspot) {
+          viewer.updateHotspot({ name: name, position: points[name] });
+        }
+      });
 
-      // Ancho: abajo, adelante a la izquierda
-      var anchoPos = (center.x - hx) + ' ' + (center.y - hy) + ' ' + (center.z + hz);
-      anchoHotspot.setAttribute('data-position', anchoPos);
-      anchoHotspot.setAttribute('data-normal', '0 -1 0');
-      anchoHotspot.querySelector('.dim-value').textContent = product.ancho + ' cm';
-
-      // Fondo: abajo, costado derecho — al otro extremo
-      var fondoPos = (center.x + hx) + ' ' + (center.y - hy) + ' ' + center.z;
-      fondoHotspot.setAttribute('data-position', fondoPos);
-      fondoHotspot.setAttribute('data-normal', '1 0 0');
-      fondoHotspot.querySelector('.dim-value').textContent = product.fondo + ' cm';
-
-      if (viewer.updateHotspot) {
-        viewer.updateHotspot({ name: 'hotspot-alto', position: altoPos, normal: '-1 0 0' });
-        viewer.updateHotspot({ name: 'hotspot-ancho', position: anchoPos, normal: '0 -1 0' });
-        viewer.updateHotspot({ name: 'hotspot-fondo', position: fondoPos, normal: '1 0 0' });
-      }
+      viewer._dimValues = {
+        alto: product.alto + ' cm',
+        ancho: product.ancho + ' cm',
+        fondo: product.fondo + ' cm'
+      };
     } catch (e) {
       // si algo falla, simplemente no se muestran las medidas sobre el modelo
     }
+  }
+
+  // Dibuja las líneas de medida en el SVG, consultando la posición en
+  // pantalla real de cada ancla (así siguen al mueble cuando lo rotás).
+  function drawDimensionLines(overlay, viewer) {
+    var svg = overlay.querySelector('#dimSvg');
+    if (!svg || !viewer.queryHotspot || !viewer._dimValues) return;
+
+    var rect = viewer.getBoundingClientRect();
+    svg.setAttribute('viewBox', '0 0 ' + rect.width + ' ' + rect.height);
+
+    function point(name) {
+      var hs = viewer.queryHotspot(name);
+      if (!hs || !hs.canvasPosition) return null;
+      return hs.canvasPosition;
+    }
+
+    function dimensionLine(fromName, toName, label, offset) {
+      var a = point(fromName);
+      var b = point(toName);
+      if (!a || !b) return '';
+
+      // vector perpendicular a la línea, para las patitas de los extremos
+      var dx = b.x - a.x;
+      var dy = b.y - a.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var px = (-dy / len) * 6;
+      var py = (dx / len) * 6;
+
+      var midX = (a.x + b.x) / 2;
+      var midY = (a.y + b.y) / 2;
+      var labelWidth = label.length * 6.2 + 14;
+
+      return (
+        '<line x1="' + a.x + '" y1="' + a.y + '" x2="' + b.x + '" y2="' + b.y + '"></line>' +
+        '<line class="dim-tick" x1="' + (a.x - px) + '" y1="' + (a.y - py) + '" x2="' + (a.x + px) + '" y2="' + (a.y + py) + '"></line>' +
+        '<line class="dim-tick" x1="' + (b.x - px) + '" y1="' + (b.y - py) + '" x2="' + (b.x + px) + '" y2="' + (b.y + py) + '"></line>' +
+        '<rect class="dim-label-bg" x="' + (midX - labelWidth / 2) + '" y="' + (midY - 10) + '" width="' + labelWidth + '" height="20" rx="10"></rect>' +
+        '<text x="' + midX + '" y="' + (midY + 4) + '" text-anchor="middle">' + escapeHtml(label) + '</text>'
+      );
+    }
+
+    svg.innerHTML =
+      dimensionLine('hotspot-alto-top', 'hotspot-alto-bottom', viewer._dimValues.alto) +
+      dimensionLine('hotspot-ancho-left', 'hotspot-ancho-right', viewer._dimValues.ancho) +
+      dimensionLine('hotspot-fondo-near', 'hotspot-fondo-far', viewer._dimValues.fondo);
+  }
+
+  function startDimensionTracking(overlay, viewer) {
+    stopDimensionTracking(overlay, viewer);
+
+    function redraw() { drawDimensionLines(overlay, viewer); }
+
+    viewer.__dimRedraw = redraw;
+    viewer.addEventListener('camera-change', redraw);
+    redraw();
+  }
+
+  function stopDimensionTracking(overlay, viewer) {
+    if (viewer && viewer.__dimRedraw) {
+      viewer.removeEventListener('camera-change', viewer.__dimRedraw);
+      viewer.__dimRedraw = null;
+    }
+    var svg = overlay.querySelector('#dimSvg');
+    if (svg) svg.innerHTML = '';
   }
 
   function openAR(overlay, product) {
@@ -1297,6 +1361,7 @@
       viewer.setAttribute('src', product.model_url);
       applyRealScale(viewer, product.alto, product.ancho, product.fondo);
 
+      stopDimensionTracking(overlay, viewer);
       overlay._currentProduct = product;
       overlay.classList.remove('showing-dims');
       overlay.querySelector('#dimsToggle').textContent = 'Ver medidas sobre el mueble';
