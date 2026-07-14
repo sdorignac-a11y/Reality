@@ -155,6 +155,7 @@ export default function ProductosPage() {
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [installationOpen, setInstallationOpen] = useState(false);
+  const [installMode, setInstallMode] = useState('float'); // 'float' | 'inline'
 
   const [importOpen, setImportOpen] = useState(false);
   const [importTab, setImportTab] = useState('csv'); // 'csv' | 'quick'
@@ -859,26 +860,57 @@ export default function ProductosPage() {
             {installationOpen && (
               <div className="installation-content">
                 <div>
-                  <strong>1. Copiá el código</strong>
+                  <strong>1. Elegí cómo se va a ver</strong>
                   <p>
-                    Pegalo antes del cierre de la etiqueta
-                    <code>&lt;/body&gt;</code> del sitio del cliente. Este código ya
-                    tiene tu ID de mueblería incluido — no lo compartas con otra
-                    mueblería, cada una necesita el suyo propio.
+                    <b>Flotante</b>: una mancha en una esquina, para cualquier sitio.{' '}
+                    <b>Barra fija</b>: dos botones en el lugar exacto del HTML donde
+                    pongas el código — mejor si el sitio ya tiene otro botón flotante
+                    (WhatsApp, chat, etc.) y no querés que se superpongan.
+                  </p>
+
+                  <div className="install-mode-toggle">
+                    <button
+                      type="button"
+                      className={installMode === 'float' ? 'active' : ''}
+                      onClick={() => setInstallMode('float')}
+                    >
+                      <i data-lucide="sparkles"></i>
+                      Flotante
+                    </button>
+                    <button
+                      type="button"
+                      className={installMode === 'inline' ? 'active' : ''}
+                      onClick={() => setInstallMode('inline')}
+                    >
+                      <i data-lucide="rows-3"></i>
+                      Barra fija
+                    </button>
+                  </div>
+
+                  <strong style={{ marginTop: 14, display: 'block' }}>2. Copiá el código</strong>
+                  <p>
+                    {installMode === 'float'
+                      ? <>Pegalo antes del cierre de la etiqueta <code>&lt;/body&gt;</code> del sitio del cliente.</>
+                      : <>Pegalo justo debajo de las fotos del producto, en el lugar exacto donde querés que aparezcan los botones.</>}
+                    {' '}Este código ya tiene tu ID de mueblería incluido — no lo compartas
+                    con otra mueblería, cada una necesita el suyo propio.
                   </p>
                 </div>
 
                 <pre>
-{`<script src="https://cutzstudio.vercel.app/widget.js"></script>
-<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}"></div>`}
+{installMode === 'float'
+  ? `<script src="https://cutzstudio.vercel.app/widget.js"></script>\n<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}"></div>`
+  : `<script src="https://cutzstudio.vercel.app/widget.js"></script>\n<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}" data-ebano-inline></div>`}
                 </pre>
 
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(
-`<script src="https://cutzstudio.vercel.app/widget.js"></script>\n<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}"></div>`
-                    );
+                    const snippet =
+                      installMode === 'float'
+                        ? `<script src="https://cutzstudio.vercel.app/widget.js"></script>\n<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}"></div>`
+                        : `<script src="https://cutzstudio.vercel.app/widget.js"></script>\n<div data-ebano-auto data-store="${user?.id || 'TU-ID-DE-MUEBLERIA'}" data-ebano-inline></div>`;
+                    navigator.clipboard.writeText(snippet);
                     showToast('Código copiado', 'Ya podés pegarlo en el sitio del cliente.');
                   }}
                 >
@@ -2039,12 +2071,43 @@ export default function ProductosPage() {
 
         .installation-content {
           display: grid;
-          grid-template-columns: 1fr 1.3fr auto;
-          align-items: center;
-          gap: 20px;
+          grid-template-columns: 1fr;
+          gap: 14px;
           padding: 18px 20px 20px;
           border-top: 1px solid rgba(44, 114, 220, 0.09);
           background: rgba(255, 255, 255, 0.7);
+        }
+
+        .install-mode-toggle {
+          display: flex;
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .install-mode-toggle button {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          min-height: 38px;
+          padding: 0 14px;
+          border: 1px solid #d7e2f1;
+          border-radius: 11px;
+          color: #627598;
+          background: var(--white);
+          font-size: 0.76rem;
+          font-weight: 850;
+          cursor: pointer;
+        }
+
+        .install-mode-toggle button i {
+          width: 14px;
+          height: 14px;
+        }
+
+        .install-mode-toggle button.active {
+          border-color: var(--blue-600);
+          color: var(--blue-700);
+          background: var(--blue-50);
         }
 
         .installation-content strong {
