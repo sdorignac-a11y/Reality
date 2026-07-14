@@ -607,6 +607,7 @@
       '}',
 
       '.dim-pill{',
+      '  position:relative;',
       '  display:inline-flex;',
       '  align-items:center;',
       '  gap:4px;',
@@ -618,6 +619,20 @@
       '  font-weight:800;',
       '  white-space:nowrap;',
       '  box-shadow:0 4px 10px rgba(0,0,0,.22);',
+      '}',
+
+      '.dim-pill:before{',
+      '  content:"";',
+      '  position:absolute;',
+      '  top:50%;',
+      '  left:-4px;',
+      '  width:8px;',
+      '  height:8px;',
+      '  border-radius:50%;',
+      '  background:#3D2A1B;',
+      '  border:2px solid #FFF7ED;',
+      '  box-shadow:0 0 0 1px rgba(0,0,0,.35);',
+      '  transform:translate(-50%,-50%);',
       '}',
 
       '.dims-toggle{',
@@ -1208,26 +1223,26 @@
       var anchoHotspot = viewer.querySelector('[slot="hotspot-ancho"]');
       var fondoHotspot = viewer.querySelector('[slot="hotspot-fondo"]');
 
-      // Alto: arista vertical, adelante a la derecha
-      var altoPos = (center.x + hx) + ' ' + center.y + ' ' + (center.z + hz);
+      // Alto: arriba, atrás a la izquierda — lejos de las otras dos
+      var altoPos = (center.x - hx) + ' ' + (center.y + hy) + ' ' + (center.z - hz);
       altoHotspot.setAttribute('data-position', altoPos);
-      altoHotspot.setAttribute('data-normal', '1 0 0');
+      altoHotspot.setAttribute('data-normal', '-1 0 0');
       altoHotspot.querySelector('.dim-value').textContent = product.alto + ' cm';
 
-      // Ancho: arista horizontal, adelante abajo
-      var anchoPos = center.x + ' ' + (center.y - hy) + ' ' + (center.z + hz);
+      // Ancho: abajo, adelante a la izquierda
+      var anchoPos = (center.x - hx) + ' ' + (center.y - hy) + ' ' + (center.z + hz);
       anchoHotspot.setAttribute('data-position', anchoPos);
       anchoHotspot.setAttribute('data-normal', '0 -1 0');
       anchoHotspot.querySelector('.dim-value').textContent = product.ancho + ' cm';
 
-      // Fondo: arista lateral, costado abajo
+      // Fondo: abajo, costado derecho — al otro extremo
       var fondoPos = (center.x + hx) + ' ' + (center.y - hy) + ' ' + center.z;
       fondoHotspot.setAttribute('data-position', fondoPos);
       fondoHotspot.setAttribute('data-normal', '1 0 0');
       fondoHotspot.querySelector('.dim-value').textContent = product.fondo + ' cm';
 
       if (viewer.updateHotspot) {
-        viewer.updateHotspot({ name: 'hotspot-alto', position: altoPos, normal: '1 0 0' });
+        viewer.updateHotspot({ name: 'hotspot-alto', position: altoPos, normal: '-1 0 0' });
         viewer.updateHotspot({ name: 'hotspot-ancho', position: anchoPos, normal: '0 -1 0' });
         viewer.updateHotspot({ name: 'hotspot-fondo', position: fondoPos, normal: '1 0 0' });
       }
