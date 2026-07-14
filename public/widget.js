@@ -51,25 +51,22 @@
   }
 
   // Corrige la escala del modelo 3D para que coincida con las medidas
-  // reales cargadas en el producto (alto/ancho/fondo en cm).
+  // reales cargadas en el producto (alto/ancho/fondo en cm) — sin esto,
+  // el tamaño en AR depende únicamente de cómo haya salido escalado el
+  // archivo .glb, que puede no tener nada que ver con las medidas reales.
   function applyRealScale(modelViewer, alto, ancho, fondo) {
+    // Si este visor ya tenía un escuchador de una vez anterior, lo sacamos
+    // primero — si no, se van acumulando uno por cada producto que se vio,
+    // y todos terminan disparando juntos y pisándose entre sí.
     if (modelViewer.__realityDoScale) {
-      modelViewer.removeEventListener(
-        'load',
-        modelViewer.__realityDoScale
-      );
-
+      modelViewer.removeEventListener('load', modelViewer.__realityDoScale);
       modelViewer.__realityDoScale = null;
     }
 
     function doScale() {
       try {
         var dims = modelViewer.getDimensions();
-        var current = modelViewer.scale || {
-          x: 1,
-          y: 1,
-          z: 1
-        };
+        var current = modelViewer.scale || { x: 1, y: 1, z: 1 };
 
         var baseX = dims.x / (current.x || 1);
         var baseY = dims.y / (current.y || 1);
@@ -79,49 +76,27 @@
         var targetY = (Number(alto) || 0) / 100;
         var targetZ = (Number(fondo) || 0) / 100;
 
-        var ratios = [];
+        // Un factor por eje (no un promedio) — así las tres medidas
+        // quedan exactas, aunque eso implique estirar un poco la forma
+        // si el modelo 3D no tenía las mismas proporciones reales.
+        var scaleX = baseX > 0 && targetX > 0 ? targetX / baseX : 1;
+        var scaleY = baseY > 0 && targetY > 0 ? targetY / baseY : 1;
+        var scaleZ = baseZ > 0 && targetZ > 0 ? targetZ / baseZ : 1;
 
-        if (baseX > 0 && targetX > 0) {
-          ratios.push(targetX / baseX);
-        }
-
-        if (baseY > 0 && targetY > 0) {
-          ratios.push(targetY / baseY);
-        }
-
-        if (baseZ > 0 && targetZ > 0) {
-          ratios.push(targetZ / baseZ);
-        }
-
-        if (!ratios.length) {
+        if (![scaleX, scaleY, scaleZ].every(function (n) { return isFinite(n) && n > 0; })) {
           return;
         }
 
-        var avg =
-          ratios.reduce(function (a, b) {
-            return a + b;
-          }, 0) / ratios.length;
-
-        if (!isFinite(avg) || avg <= 0) {
-          return;
-        }
-
-        modelViewer.setAttribute(
-          'scale',
-          avg + ' ' + avg + ' ' + avg
-        );
+        modelViewer.setAttribute('scale', scaleX + ' ' + scaleY + ' ' + scaleZ);
       } catch (e) {
-        // Si algo falla, dejamos el modelo con su escala original.
+        // si algo falla, dejamos el modelo con su escala original
       }
     }
 
     modelViewer.__realityDoScale = doScale;
 
     modelViewer.addEventListener('load', doScale);
-
-    if (modelViewer.loaded) {
-      doScale();
-    }
+    if (modelViewer.loaded) doScale();
   }
 
   function fetchFromSupabase(url) {
@@ -147,7 +122,7 @@
       '&owner_id=eq.' +
       encodeURIComponent(storeId) +
       '&status=eq.published' +
-      '&select=id,name,price,alto,ancho,fondo,model_url,slug';
+      '&select=id,name,price,alto,ancho,fondo,model_url,slug,extra_measurements';
 
     return fetchFromSupabase(url).then(function (rows) {
       if (!rows.length) {
@@ -166,7 +141,7 @@
       '&owner_id=eq.' +
       encodeURIComponent(storeId) +
       '&status=eq.published' +
-      '&select=id,name,price,alto,ancho,fondo,model_url,slug';
+      '&select=id,name,price,alto,ancho,fondo,model_url,slug,extra_measurements';
 
     return fetchFromSupabase(url).then(function (rows) {
       return rows.length ? rows[0] : null;
@@ -179,7 +154,7 @@
       '/rest/v1/products?status=eq.published' +
       '&owner_id=eq.' +
       encodeURIComponent(storeId) +
-      '&select=id,name,price,alto,ancho,fondo,model_url,slug' +
+      '&select=id,name,price,alto,ancho,fondo,model_url,slug,extra_measurements' +
       '&order=created_at.desc';
 
     return fetchFromSupabase(url);
@@ -235,77 +210,6 @@
     );
   }
 
-  function sofaIcon() {
-    return (
-      '<svg class="line-icon" viewBox="0 0 48 48" aria-hidden="true">' +
-      '  <path d="M12 22v-5.5A5.5 5.5 0 0 1 17.5 11h13A5.5 5.5 0 0 1 36 16.5V22" />' +
-      '  <path d="M9 22h30a4 4 0 0 1 4 4v8H5v-8a4 4 0 0 1 4-4Z" />' +
-      '  <path d="M8 34v5M40 34v5M14 22v12M34 22v12" />' +
-      '</svg>'
-    );
-  }
-
-  function rulerIcon() {
-    return (
-      '<svg class="line-icon" viewBox="0 0 48 48" aria-hidden="true">' +
-      '  <path d="m10 32 22-22 6 6-22 22H10z" />' +
-      '  <path d="m26 16 3 3M21 21l3 3M16 26l3 3M31 11l3 3" />' +
-      '</svg>'
-    );
-  }
-
-  function scanIcon() {
-    return (
-      '<svg class="line-icon" viewBox="0 0 48 48" aria-hidden="true">' +
-      '  <path d="M17 7H9a2 2 0 0 0-2 2v8M31 7h8a2 2 0 0 1 2 2v8M41 31v8a2 2 0 0 1-2 2h-8M17 41H9a2 2 0 0 1-2-2v-8" />' +
-      '  <circle cx="24" cy="24" r="7" />' +
-      '  <path d="M24 13v4M24 31v4M13 24h4M31 24h4" />' +
-      '</svg>'
-    );
-  }
-
-  function lockIcon() {
-    return (
-      '<svg class="line-icon" viewBox="0 0 48 48" aria-hidden="true">' +
-      '  <rect x="11" y="21" width="26" height="20" rx="4" />' +
-      '  <path d="M17 21v-6a7 7 0 0 1 14 0v6M24 29v5" />' +
-      '</svg>'
-    );
-  }
-
-  function formatProductPrice(value) {
-    if (
-      value === null ||
-      value === undefined ||
-      value === ''
-    ) {
-      return '';
-    }
-
-    var raw = String(value).trim();
-
-    if (/[$€£]|ARS|USD/i.test(raw)) {
-      return raw;
-    }
-
-    var numeric = Number(
-      raw
-        .replace(/\./g, '')
-        .replace(',', '.')
-    );
-
-    if (!isFinite(numeric)) {
-      return raw;
-    }
-
-    return (
-      '$ ' +
-      numeric.toLocaleString('es-AR', {
-        maximumFractionDigits: 0
-      })
-    );
-  }
-
   // -----------------------------------------------------------
   // UI flotante con Shadow DOM
   // -----------------------------------------------------------
@@ -318,15 +222,13 @@
     document.body.appendChild(host);
 
     var root = host.attachShadow
-      ? host.attachShadow({
-          mode: 'open'
-        })
+      ? host.attachShadow({ mode: 'open' })
       : host;
 
     var style = document.createElement('style');
 
     style.textContent = [
-      '@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Serif+Display&family=Nunito:wght@400;600;700;800;900&display=swap");',
+      '@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800;900&display=swap");',
 
       '*{',
       '  box-sizing:border-box;',
@@ -648,423 +550,27 @@
       '  color:#3D2A1B;',
       '}',
 
-      '.ar-overlay{',
-      '  background:rgba(46,40,35,.40);',
-      '  backdrop-filter:blur(9px);',
-      '  -webkit-backdrop-filter:blur(9px);',
-      '}',
-
-      '.ar-modal{',
-      '  width:720px;',
-      '  max-width:100%;',
-      '  max-height:94vh;',
-      '  overflow-y:auto;',
-      '  padding:0;',
-      '  border-radius:22px;',
-      '  background:linear-gradient(180deg,#FFFBF6 0%,#FFF8EF 100%);',
-      '  border:1px solid rgba(221,197,169,.72);',
-      '  box-shadow:0 38px 100px rgba(39,29,20,.28),0 10px 32px rgba(61,42,27,.12);',
-      '  scrollbar-width:thin;',
-      '  scrollbar-color:#DCC5A8 transparent;',
-      '}',
-
-      '.ar-modal::-webkit-scrollbar{',
-      '  width:7px;',
-      '}',
-
-      '.ar-modal::-webkit-scrollbar-thumb{',
-      '  background:#DCC5A8;',
-      '  border-radius:999px;',
-      '}',
-
-      '.ar-modal-header{',
-      '  display:flex;',
-      '  align-items:center;',
-      '  justify-content:space-between;',
-      '  gap:18px;',
-      '  padding:26px 28px 20px;',
-      '}',
-
-      '.ar-heading{',
-      '  min-width:0;',
-      '  display:flex;',
-      '  align-items:center;',
-      '  gap:18px;',
-      '}',
-
-      '.ar-product-icon{',
-      '  width:54px;',
-      '  height:54px;',
-      '  flex:0 0 54px;',
-      '  display:flex;',
-      '  align-items:center;',
-      '  justify-content:center;',
-      '  border-radius:999px;',
-      '  color:#B67837;',
-      '  background:linear-gradient(180deg,#FFFCF8 0%,#FFF5E9 100%);',
-      '  border:1px solid rgba(217,170,115,.58);',
-      '  box-shadow:0 6px 14px rgba(95,57,25,.08);',
-      '}',
-
-      '.ar-product-icon .line-icon{',
-      '  width:27px;',
-      '  height:27px;',
-      '  stroke-width:2.2;',
-      '}',
-
-      '.ar-product-info{',
-      '  min-width:0;',
-      '  display:flex;',
-      '  align-items:baseline;',
-      '  flex-wrap:wrap;',
-      '  gap:7px 22px;',
-      '}',
-
-      '.ar-title{',
-      '  min-width:0;',
-      '  overflow:hidden;',
-      '  text-overflow:ellipsis;',
-      '  white-space:nowrap;',
-      '  font-family:"DM Serif Display",Georgia,serif;',
-      '  font-size:27px;',
-      '  line-height:1.05;',
-      '  font-weight:400;',
-      '  letter-spacing:-.02em;',
-      '  color:#30231B;',
-      '}',
-
-      '.ar-price{',
-      '  font-size:16.5px;',
-      '  line-height:1;',
-      '  font-weight:900;',
-      '  color:#B67837;',
-      '  white-space:nowrap;',
-      '}',
-
-      '.ar-modal .close{',
-      '  width:48px;',
-      '  height:48px;',
-      '  flex:0 0 48px;',
-      '  display:flex;',
-      '  align-items:center;',
-      '  justify-content:center;',
-      '  background:#FFFCF8;',
-      '  border:1px solid rgba(226,208,187,.78);',
-      '  color:#735132;',
-      '  font-size:27px;',
-      '  font-weight:300;',
-      '  line-height:1;',
-      '  box-shadow:0 8px 18px rgba(84,55,29,.10);',
-      '  transition:transform .18s ease,background .18s ease,box-shadow .18s ease;',
-      '}',
-
-      '.ar-modal .close:hover{',
-      '  transform:rotate(5deg) scale(1.03);',
-      '  background:#FFF7EC;',
-      '  box-shadow:0 11px 22px rgba(84,55,29,.14);',
-      '}',
-
-      '.ar-frame{',
-      '  position:relative;',
-      '  width:auto;',
-      '  height:430px;',
-      '  margin:0 28px;',
-      '  overflow:hidden;',
-      '  border-radius:18px;',
-      '  background:radial-gradient(circle at 50% 47%,rgba(255,255,255,.98) 0%,rgba(251,247,241,.92) 46%,rgba(241,234,225,.86) 100%);',
-      '  border:1px solid rgba(226,212,195,.82);',
-      '  box-shadow:inset 0 1px 0 rgba(255,255,255,.9);',
-      '}',
-
-      '.ar-viewer{',
-      '  position:absolute;',
-      '  inset:0;',
-      '  width:100%;',
-      '  height:100%;',
-      '  --poster-color:transparent;',
-      '  background:transparent;',
-      '}',
-
-      '.native-ar-trigger{',
-      '  position:absolute;',
-      '  width:1px;',
-      '  height:1px;',
-      '  opacity:0;',
-      '  pointer-events:none;',
-      '  overflow:hidden;',
-      '}',
-
-      '.measure-layer{',
-      '  position:absolute;',
-      '  inset:0;',
-      '  z-index:4;',
-      '  pointer-events:none;',
-      '  opacity:0;',
-      '  transform:scale(.985);',
-      '  transition:opacity .2s ease,transform .2s ease;',
-      '}',
-
-      '.ar-overlay.showing-dims .measure-layer{',
-      '  opacity:1;',
-      '  transform:scale(1);',
-      '}',
-
-      '.measure{',
-      '  position:absolute;',
-      '  color:#6B513B;',
-      '  font-size:12px;',
-      '  line-height:1.15;',
-      '  font-weight:800;',
-      '  letter-spacing:-.01em;',
-      '}',
-
-      '.measure b{',
-      '  font-weight:900;',
-      '}',
-
-      '.measure-rule{',
-      '  position:absolute;',
-      '  display:block;',
-      '  background:#7A5E43;',
-      '}',
-
-      '.measure-rule:before,',
-      '.measure-rule:after{',
-      '  content:"";',
-      '  position:absolute;',
-      '  display:block;',
-      '  background:#7A5E43;',
-      '}',
-
-      '.measure-label{',
-      '  position:absolute;',
-      '  z-index:2;',
-      '  display:block;',
-      '  padding:3px 8px;',
-      '  border-radius:6px;',
-      '  background:rgba(250,246,240,.94);',
-      '  box-shadow:0 2px 8px rgba(72,48,29,.04);',
-      '  white-space:nowrap;',
-      '}',
-
-      '.measure-width{',
-      '  top:58px;',
-      '  left:20%;',
-      '  right:17%;',
-      '  height:28px;',
-      '}',
-
-      '.measure-width .measure-rule{',
-      '  left:0;',
-      '  right:0;',
-      '  top:50%;',
-      '  height:1px;',
-      '}',
-
-      '.measure-width .measure-rule:before,',
-      '.measure-width .measure-rule:after{',
-      '  top:-4px;',
-      '  width:1px;',
-      '  height:9px;',
-      '}',
-
-      '.measure-width .measure-rule:before{',
-      '  left:0;',
-      '}',
-
-      '.measure-width .measure-rule:after{',
-      '  right:0;',
-      '}',
-
-      '.measure-width .measure-label{',
-      '  top:50%;',
-      '  left:50%;',
-      '  transform:translate(-50%,-50%);',
-      '}',
-
-      '.measure-height{',
-      '  top:104px;',
-      '  bottom:98px;',
-      '  left:23px;',
-      '  width:84px;',
-      '}',
-
-      '.measure-height .measure-rule{',
-      '  top:0;',
-      '  bottom:0;',
-      '  left:51px;',
-      '  width:1px;',
-      '}',
-
-      '.measure-height .measure-rule:before,',
-      '.measure-height .measure-rule:after{',
-      '  left:-4px;',
-      '  width:9px;',
-      '  height:1px;',
-      '}',
-
-      '.measure-height .measure-rule:before{',
-      '  top:0;',
-      '}',
-
-      '.measure-height .measure-rule:after{',
-      '  bottom:0;',
-      '}',
-
-      '.measure-height .measure-label{',
-      '  top:50%;',
-      '  left:0;',
-      '  max-width:48px;',
-      '  padding:4px 3px;',
-      '  text-align:center;',
-      '  white-space:normal;',
-      '  transform:translateY(-50%);',
-      '}',
-
-      '.measure-depth{',
-      '  right:22px;',
-      '  bottom:70px;',
-      '  width:138px;',
-      '  height:86px;',
-      '}',
-
-      '.measure-depth .measure-rule{',
-      '  left:8px;',
-      '  bottom:10px;',
-      '  width:82px;',
-      '  height:1px;',
-      '  transform:rotate(-48deg);',
-      '  transform-origin:left center;',
-      '}',
-
-      '.measure-depth .measure-rule:before,',
-      '.measure-depth .measure-rule:after{',
-      '  top:-4px;',
-      '  width:1px;',
-      '  height:9px;',
-      '}',
-
-      '.measure-depth .measure-rule:before{',
-      '  left:0;',
-      '}',
-
-      '.measure-depth .measure-rule:after{',
-      '  right:0;',
-      '}',
-
-      '.measure-depth .measure-label{',
-      '  right:0;',
-      '  bottom:0;',
-      '  max-width:78px;',
-      '  white-space:normal;',
-      '  text-align:left;',
-      '}',
-
-      '.ar-frame-note{',
-      '  position:absolute;',
-      '  left:18px;',
-      '  bottom:15px;',
-      '  z-index:5;',
-      '  display:flex;',
-      '  align-items:center;',
-      '  gap:10px;',
-      '  max-width:330px;',
-      '  color:#725F50;',
-      '  font-size:11.5px;',
-      '  line-height:1.35;',
-      '  font-weight:600;',
-      '  pointer-events:none;',
-      '}',
-
-      '.ar-frame-note .line-icon{',
-      '  width:27px;',
-      '  height:27px;',
-      '  flex:0 0 27px;',
-      '  color:#9E7449;',
-      '  stroke-width:2;',
-      '}',
-
-      '.ar-actions{',
-      '  display:grid;',
-      '  grid-template-columns:1fr 1fr;',
-      '  gap:14px;',
-      '  margin:18px 28px 0;',
-      '}',
-
-      '.ar-action-btn{',
-      '  height:54px;',
-      '  display:flex;',
-      '  align-items:center;',
-      '  justify-content:center;',
-      '  gap:10px;',
-      '  border-radius:14px;',
-      '  font-family:"Nunito",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
-      '  font-size:14px;',
-      '  line-height:1;',
-      '  font-weight:900;',
-      '  cursor:pointer;',
-      '  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease;',
-      '}',
-
-      '.ar-action-btn:hover{',
-      '  transform:translateY(-1px);',
-      '}',
-
-      '.ar-action-btn:active{',
-      '  transform:translateY(0);',
-      '}',
-
-      '.ar-action-btn .line-icon{',
-      '  width:21px;',
-      '  height:21px;',
-      '  stroke-width:2.4;',
-      '}',
-
-      '.dims-toggle{',
-      '  border:1px solid rgba(205,155,99,.72);',
-      '  background:rgba(255,255,255,.56);',
-      '  color:#76502F;',
-      '  box-shadow:inset 0 1px 0 rgba(255,255,255,.9);',
-      '}',
-
-      '.dims-toggle:hover,',
-      '.ar-overlay.showing-dims .dims-toggle{',
-      '  background:#FFF8EF;',
-      '  border-color:#C98A49;',
-      '  box-shadow:0 8px 18px rgba(122,75,34,.08);',
-      '}',
-
-      '.ar-open-btn{',
-      '  border:1px solid rgba(188,123,56,.24);',
-      '  background:linear-gradient(180deg,#D7A566 0%,#C58947 100%);',
-      '  color:#FFFFFF;',
-      '  box-shadow:0 11px 24px rgba(160,99,40,.20);',
-      '}',
-
-      '.ar-open-btn:hover{',
-      '  background:linear-gradient(180deg,#DCAA6A 0%,#C18342 100%);',
-      '  box-shadow:0 14px 28px rgba(160,99,40,.25);',
-      '}',
-
-      '.ar-security{',
-      '  display:flex;',
-      '  align-items:center;',
-      '  justify-content:center;',
-      '  gap:7px;',
-      '  margin:14px 28px 20px;',
-      '  color:#A38F7C;',
+      '.ar-dims{',
       '  font-size:11px;',
-      '  line-height:1.25;',
-      '  font-weight:600;',
-      '  text-align:center;',
+      '  font-weight:700;',
+      '  color:#8A7B68;',
+      '  margin-top:2px;',
       '}',
 
-      '.ar-security .line-icon{',
-      '  width:15px;',
-      '  height:15px;',
-      '  flex:0 0 15px;',
-      '  color:#B58A5C;',
-      '  stroke-width:2.3;',
+      '.ar-extra-dims{',
+      '  display:flex;',
+      '  flex-wrap:wrap;',
+      '  gap:6px;',
+      '  margin-top:6px;',
+      '}',
+
+      '.ar-extra-dim-item{',
+      '  padding:3px 8px;',
+      '  border-radius:999px;',
+      '  background:#F3E8D7;',
+      '  color:#6E4127;',
+      '  font-size:10px;',
+      '  font-weight:800;',
       '}',
 
       '.close{',
@@ -1076,6 +582,91 @@
       '  color:#6E4127;',
       '  font-size:16px;',
       '  cursor:pointer;',
+      '}',
+
+      '.frame{',
+      '  width:100%;',
+      '  height:280px;',
+      '  background:#FFFFFF;',
+      '  border:1px solid rgba(218,196,165,.75);',
+      '  border-radius:14px;',
+      '  overflow:hidden;',
+      '  margin-bottom:8px;',
+      '}',
+
+      'model-viewer{',
+      '  width:100%;',
+      '  height:100%;',
+      '}',
+
+      '.ar-btn{',
+      '  background:#6B4A32;',
+      '  color:#FFFFFF;',
+      '  border:none;',
+      '  padding:8px 13px;',
+      '  border-radius:999px;',
+      '  font-size:11.5px;',
+      '  font-weight:800;',
+      '  cursor:pointer;',
+      '  margin:10px;',
+      '}',
+
+      '.dim-hotspot{',
+      '  border:none;',
+      '  background:none;',
+      '  padding:0;',
+      '  cursor:default;',
+      '  display:none;',
+      '}',
+
+      '.overlay.showing-dims .dim-hotspot{',
+      '  display:block;',
+      '}',
+
+      '.dim-pill{',
+      '  position:relative;',
+      '  display:inline-flex;',
+      '  align-items:center;',
+      '  gap:4px;',
+      '  padding:4px 9px;',
+      '  border-radius:999px;',
+      '  background:#3D2A1B;',
+      '  color:#FFF7ED;',
+      '  font-size:10.5px;',
+      '  font-weight:800;',
+      '  white-space:nowrap;',
+      '  box-shadow:0 4px 10px rgba(0,0,0,.22);',
+      '}',
+
+      '.dim-pill:before{',
+      '  content:"";',
+      '  position:absolute;',
+      '  top:50%;',
+      '  left:-4px;',
+      '  width:8px;',
+      '  height:8px;',
+      '  border-radius:50%;',
+      '  background:#3D2A1B;',
+      '  border:2px solid #FFF7ED;',
+      '  box-shadow:0 0 0 1px rgba(0,0,0,.35);',
+      '  transform:translate(-50%,-50%);',
+      '}',
+
+      '.dims-toggle{',
+      '  width:100%;',
+      '  background:#FFFFFF;',
+      '  color:#6B4A32;',
+      '  border:1.5px solid #DCC8A9;',
+      '  padding:8px;',
+      '  border-radius:999px;',
+      '  font-size:11px;',
+      '  font-weight:800;',
+      '  cursor:pointer;',
+      '  margin-bottom:8px;',
+      '}',
+
+      '.dims-toggle:hover{',
+      '  background:#FBF0E1;',
       '}',
 
       '.hint{',
@@ -1411,101 +1002,6 @@
       '    width:52px;',
       '    height:52px;',
       '  }',
-      '  .ar-modal{',
-      '    width:100%;',
-      '    max-height:94vh;',
-      '    border-radius:18px;',
-      '  }',
-      '  .ar-modal-header{',
-      '    gap:10px;',
-      '    padding:16px 16px 13px;',
-      '  }',
-      '  .ar-heading{',
-      '    gap:11px;',
-      '  }',
-      '  .ar-product-icon{',
-      '    width:44px;',
-      '    height:44px;',
-      '    flex-basis:44px;',
-      '  }',
-      '  .ar-product-icon .line-icon{',
-      '    width:23px;',
-      '    height:23px;',
-      '  }',
-      '  .ar-product-info{',
-      '    display:block;',
-      '  }',
-      '  .ar-title{',
-      '    display:block;',
-      '    max-width:calc(100vw - 150px);',
-      '    font-size:21px;',
-      '  }',
-      '  .ar-price{',
-      '    display:block;',
-      '    margin-top:4px;',
-      '    font-size:13.5px;',
-      '  }',
-      '  .ar-modal .close{',
-      '    width:42px;',
-      '    height:42px;',
-      '    flex-basis:42px;',
-      '    font-size:24px;',
-      '  }',
-      '  .ar-frame{',
-      '    height:min(56vh,390px);',
-      '    min-height:310px;',
-      '    margin:0 14px;',
-      '    border-radius:15px;',
-      '  }',
-      '  .measure-width{',
-      '    top:45px;',
-      '    left:20%;',
-      '    right:14%;',
-      '  }',
-      '  .measure-height{',
-      '    top:88px;',
-      '    bottom:88px;',
-      '    left:7px;',
-      '  }',
-      '  .measure-depth{',
-      '    right:8px;',
-      '    bottom:60px;',
-      '    transform:scale(.86);',
-      '    transform-origin:right bottom;',
-      '  }',
-      '  .measure{',
-      '    font-size:10px;',
-      '  }',
-      '  .ar-frame-note{',
-      '    left:12px;',
-      '    bottom:11px;',
-      '    max-width:245px;',
-      '    gap:7px;',
-      '    font-size:9.5px;',
-      '  }',
-      '  .ar-frame-note .line-icon{',
-      '    width:23px;',
-      '    height:23px;',
-      '    flex-basis:23px;',
-      '  }',
-      '  .ar-actions{',
-      '    gap:8px;',
-      '    margin:13px 14px 0;',
-      '  }',
-      '  .ar-action-btn{',
-      '    height:48px;',
-      '    gap:7px;',
-      '    border-radius:12px;',
-      '    font-size:11.5px;',
-      '  }',
-      '  .ar-action-btn .line-icon{',
-      '    width:18px;',
-      '    height:18px;',
-      '  }',
-      '  .ar-security{',
-      '    margin:11px 14px 15px;',
-      '    font-size:9.5px;',
-      '  }',
       '}'
     ].join('\n');
 
@@ -1615,7 +1111,6 @@
 
     var arOverlay = buildAROverlay(root);
     var resultOverlay = buildResultOverlay(root);
-
     var catalogOverlay = buildCatalogOverlay(
       root,
       arOverlay,
@@ -1651,83 +1146,50 @@
   function buildAROverlay(root) {
     var overlay = document.createElement('div');
 
-    overlay.className = 'overlay ar-overlay';
+    overlay.className = 'overlay';
 
     overlay.innerHTML =
-      '<div class="modal ar-modal" role="dialog" aria-modal="true" aria-label="Visualizador 3D del producto">' +
-      '  <div class="ar-modal-header">' +
-      '    <div class="ar-heading">' +
-      '      <span class="ar-product-icon">' +
-      sofaIcon() +
-      '      </span>' +
-      '      <div class="ar-product-info">' +
-      '        <strong class="ar-title" id="arTitle"></strong>' +
-      '        <span class="ar-price" id="arPrice"></span>' +
-      '      </div>' +
+      '<div class="modal">' +
+      '  <div class="modal-top">' +
+      '    <div>' +
+      '      <strong id="arTitle"></strong>' +
+      '      <div class="ar-dims" id="arDims"></div>' +
+      '      <div class="ar-extra-dims" id="arExtraDims"></div>' +
       '    </div>' +
       '    <button class="close" aria-label="Cerrar">×</button>' +
       '  </div>' +
-
-      '  <div class="ar-frame">' +
+      '  <div class="frame">' +
       '    <model-viewer ' +
       '      id="arViewer" ' +
-      '      class="ar-viewer" ' +
       '      camera-controls ' +
-      '      interaction-prompt="none" ' +
-      '      shadow-intensity="1.15" ' +
-      '      shadow-softness=".9" ' +
-      '      exposure="1" ' +
+      '      auto-rotate ' +
+      '      shadow-intensity="1" ' +
+      '      exposure="0.95" ' +
       '      environment-image="neutral" ' +
-      '      camera-orbit="0deg 76deg auto" ' +
-      '      field-of-view="31deg" ' +
-      '      min-camera-orbit="auto 55deg auto" ' +
-      '      max-camera-orbit="auto 88deg auto" ' +
+      '      camera-orbit="35deg 78deg 2.6m" ' +
       '      ar ' +
       '      ar-modes="webxr scene-viewer quick-look" ' +
       '      ar-scale="fixed" ' +
       '      ar-placement="floor">' +
-      '      <button slot="ar-button" class="native-ar-trigger" id="nativeArTrigger" tabindex="-1">Abrir en AR</button>' +
+      '      <button slot="ar-button" class="ar-btn">' +
+      '        Ver en tu espacio' +
+      '      </button>' +
+      '      <button slot="hotspot-alto" class="dim-hotspot dim-alto" data-position="0 0 0" data-normal="0 0 1">' +
+      '        <span class="dim-pill">↕ <span class="dim-value" id="dimAlto"></span></span>' +
+      '      </button>' +
+      '      <button slot="hotspot-ancho" class="dim-hotspot dim-ancho" data-position="0 0 0" data-normal="0 -1 0">' +
+      '        <span class="dim-pill">↔ <span class="dim-value" id="dimAncho"></span></span>' +
+      '      </button>' +
+      '      <button slot="hotspot-fondo" class="dim-hotspot dim-fondo" data-position="0 0 0" data-normal="1 0 0">' +
+      '        <span class="dim-pill">⤢ <span class="dim-value" id="dimFondo"></span></span>' +
+      '      </button>' +
       '    </model-viewer>' +
-
-      '    <div class="measure-layer" aria-hidden="true">' +
-      '      <div class="measure measure-width">' +
-      '        <span class="measure-rule"></span>' +
-      '        <span class="measure-label">Ancho: <b id="dimAncho"></b></span>' +
-      '      </div>' +
-
-      '      <div class="measure measure-height">' +
-      '        <span class="measure-rule"></span>' +
-      '        <span class="measure-label">Alto:<br><b id="dimAlto"></b></span>' +
-      '      </div>' +
-
-      '      <div class="measure measure-depth">' +
-      '        <span class="measure-rule"></span>' +
-      '        <span class="measure-label">Profundidad:<br><b id="dimFondo"></b></span>' +
-      '      </div>' +
-      '    </div>' +
-
-      '    <div class="ar-frame-note">' +
-      scanIcon() +
-      '      <span>Desde el celular, tocá “Abrir en AR” para abrir la cámara y ver el mueble en tu espacio.</span>' +
-      '    </div>' +
       '  </div>' +
-
-      '  <div class="ar-actions">' +
-      '    <button class="ar-action-btn dims-toggle" id="dimsToggle" type="button" aria-pressed="false">' +
-      rulerIcon() +
-      '      <span>Ver medidas</span>' +
-      '    </button>' +
-
-      '    <button class="ar-action-btn ar-open-btn" id="openArBtn" type="button">' +
-      scanIcon() +
-      '      <span>Abrir en AR</span>' +
-      '    </button>' +
-      '  </div>' +
-
-      '  <div class="ar-security">' +
-      lockIcon() +
-      '    <span>Tu espacio, a escala real. Seguro y privado.</span>' +
-      '  </div>' +
+      '  <button class="dims-toggle" id="dimsToggle">Ver medidas sobre el mueble</button>' +
+      '  <p class="hint">' +
+      '    Desde el celular esto abre la cámara real, a escala bloqueada.' +
+      '  </p>' +
+      '  <div class="poweredby">powered by reality</div>' +
       '</div>';
 
     root.appendChild(overlay);
@@ -1747,112 +1209,97 @@
     overlay
       .querySelector('#dimsToggle')
       .addEventListener('click', function (event) {
-        var showing =
-          overlay.classList.toggle('showing-dims');
+        var viewer = overlay.querySelector('#arViewer');
+        var showing = overlay.classList.toggle('showing-dims');
 
-        var label =
-          event.currentTarget.querySelector('span');
-
-        event.currentTarget.setAttribute(
-          'aria-pressed',
-          showing ? 'true' : 'false'
-        );
-
-        label.textContent = showing
+        event.currentTarget.textContent = showing
           ? 'Ocultar medidas'
-          : 'Ver medidas';
-      });
+          : 'Ver medidas sobre el mueble';
 
-    overlay
-      .querySelector('#openArBtn')
-      .addEventListener('click', function () {
-        var viewer =
-          overlay.querySelector('#arViewer');
-
-        var nativeButton =
-          overlay.querySelector('#nativeArTrigger');
-
-        try {
-          if (
-            viewer &&
-            typeof viewer.activateAR === 'function'
-          ) {
-            var activation = viewer.activateAR();
-
-            if (
-              activation &&
-              typeof activation.catch === 'function'
-            ) {
-              activation.catch(function () {
-                if (nativeButton) {
-                  nativeButton.click();
-                }
-              });
-            }
-
-            return;
-          }
-        } catch (error) {
-          // Si el método no está disponible en este navegador,
-          // usamos el botón nativo de model-viewer.
-        }
-
-        if (nativeButton) {
-          nativeButton.click();
+        if (showing) {
+          placeMeasurementHotspots(viewer, overlay._currentProduct);
         }
       });
 
     return overlay;
   }
 
+  // Ubica las 3 etiquetas de medida (alto/ancho/fondo) sobre las esquinas
+  // reales del mueble, usando el tamaño ya corregido por applyRealScale.
+  function placeMeasurementHotspots(viewer, product) {
+    if (!viewer || !product) return;
+
+    try {
+      var dims = viewer.getDimensions();
+      var center = viewer.getBoundingBoxCenter();
+
+      var hx = dims.x / 2;
+      var hy = dims.y / 2;
+      var hz = dims.z / 2;
+
+      var altoHotspot = viewer.querySelector('[slot="hotspot-alto"]');
+      var anchoHotspot = viewer.querySelector('[slot="hotspot-ancho"]');
+      var fondoHotspot = viewer.querySelector('[slot="hotspot-fondo"]');
+
+      // Alto: arriba, atrás a la izquierda — lejos de las otras dos
+      var altoPos = (center.x - hx) + ' ' + (center.y + hy) + ' ' + (center.z - hz);
+      altoHotspot.setAttribute('data-position', altoPos);
+      altoHotspot.setAttribute('data-normal', '-1 0 0');
+      altoHotspot.querySelector('.dim-value').textContent = product.alto + ' cm';
+
+      // Ancho: abajo, adelante a la izquierda
+      var anchoPos = (center.x - hx) + ' ' + (center.y - hy) + ' ' + (center.z + hz);
+      anchoHotspot.setAttribute('data-position', anchoPos);
+      anchoHotspot.setAttribute('data-normal', '0 -1 0');
+      anchoHotspot.querySelector('.dim-value').textContent = product.ancho + ' cm';
+
+      // Fondo: abajo, costado derecho — al otro extremo
+      var fondoPos = (center.x + hx) + ' ' + (center.y - hy) + ' ' + center.z;
+      fondoHotspot.setAttribute('data-position', fondoPos);
+      fondoHotspot.setAttribute('data-normal', '1 0 0');
+      fondoHotspot.querySelector('.dim-value').textContent = product.fondo + ' cm';
+
+      if (viewer.updateHotspot) {
+        viewer.updateHotspot({ name: 'hotspot-alto', position: altoPos, normal: '-1 0 0' });
+        viewer.updateHotspot({ name: 'hotspot-ancho', position: anchoPos, normal: '0 -1 0' });
+        viewer.updateHotspot({ name: 'hotspot-fondo', position: fondoPos, normal: '1 0 0' });
+      }
+    } catch (e) {
+      // si algo falla, simplemente no se muestran las medidas sobre el modelo
+    }
+  }
+
   function openAR(overlay, product) {
     ensureModelViewer().then(function () {
       overlay.querySelector('#arTitle').textContent =
-        product.name || 'Producto';
+        product.name + ' — ' + product.price;
 
-      overlay.querySelector('#arPrice').textContent =
-        formatProductPrice(product.price);
+      overlay.querySelector('#arDims').textContent =
+        product.alto + ' × ' + product.ancho + ' × ' + product.fondo + ' cm';
 
-      overlay.querySelector('#dimAlto').textContent =
-        product.alto + ' cm';
+      var extraDims = Array.isArray(product.extra_measurements)
+        ? product.extra_measurements
+        : [];
 
-      overlay.querySelector('#dimAncho').textContent =
-        product.ancho + ' cm';
+      overlay.querySelector('#arExtraDims').innerHTML = extraDims
+        .filter(function (m) { return m && m.label && m.value; })
+        .map(function (m) {
+          return (
+            '<span class="ar-extra-dim-item">' +
+            escapeHtml(m.label) + ': ' + escapeHtml(m.value) +
+            '</span>'
+          );
+        })
+        .join('');
 
-      overlay.querySelector('#dimFondo').textContent =
-        product.fondo + ' cm';
+      var viewer = overlay.querySelector('#arViewer');
 
-      var viewer =
-        overlay.querySelector('#arViewer');
-
-      viewer.setAttribute(
-        'src',
-        product.model_url
-      );
-
-      applyRealScale(
-        viewer,
-        product.alto,
-        product.ancho,
-        product.fondo
-      );
+      viewer.setAttribute('src', product.model_url);
+      applyRealScale(viewer, product.alto, product.ancho, product.fondo);
 
       overlay._currentProduct = product;
-
-      overlay.classList.remove(
-        'showing-dims'
-      );
-
-      var toggle =
-        overlay.querySelector('#dimsToggle');
-
-      toggle.setAttribute(
-        'aria-pressed',
-        'false'
-      );
-
-      toggle.querySelector('span').textContent =
-        'Ver medidas';
+      overlay.classList.remove('showing-dims');
+      overlay.querySelector('#dimsToggle').textContent = 'Ver medidas sobre el mueble';
 
       overlay.classList.add('open');
     });
@@ -1869,7 +1316,6 @@
       '    <strong>Así podría quedar</strong>' +
       '    <button class="close" aria-label="Cerrar">×</button>' +
       '  </div>' +
-
       '  <div class="result-frame" id="resultFrame">' +
       '    <div class="result-loading" id="resultLoading">' +
       sparkIcon() +
@@ -1877,11 +1323,9 @@
       '    </div>' +
       '    <img id="resultImage" alt="Resultado generado" style="display:none;">' +
       '  </div>' +
-
       '  <p class="hint">' +
       '    Imagen generada por IA a partir de tu foto. Es una interpretación, no una medición exacta como el AR.' +
       '  </p>' +
-
       '  <div class="poweredby">powered by reality</div>' +
       '</div>';
 
@@ -1917,67 +1361,48 @@
       '    <strong>Probá un mueble en tu espacio</strong>' +
       '    <button class="close" aria-label="Cerrar">×</button>' +
       '  </div>' +
-
       '  <div class="upload-zone" id="uploadZone">' +
       '    <div id="uploadPlaceholder">' +
       cameraIcon() +
       '      <p>Subí una foto del lugar donde querés probar un mueble.</p>' +
       '    </div>' +
-
       '    <img id="uploadPreview" alt="Vista previa" style="display:none;">' +
-
       '    <input ' +
       '      type="file" ' +
       '      id="uploadInput" ' +
       '      accept="image/*" ' +
       '      style="display:none;">' +
       '  </div>' +
-
       '  <textarea ' +
       '    class="user-note" ' +
       '    id="userNote" ' +
       '    placeholder="¿Algo que quieras contarnos? Ej: quiero algo para el rincón de la ventana, o que combine con la pared blanca (opcional)"></textarea>' +
-
       '  <button class="analyze-btn" id="analyzeBtn">' +
       sparkIcon() +
       '    Buscar qué mueble queda mejor acá' +
       '  </button>' +
-
       '  <div class="rec-banner" id="recBanner"></div>' +
-
       '  <div class="cat-note">' +
       '    También podés elegir vos directo del catálogo completo:' +
       '  </div>' +
-
       '  <div class="cat-list" id="catList">' +
       '    <div class="empty">Cargando catálogo…</div>' +
       '  </div>' +
-
       '  <div class="poweredby">powered by reality</div>' +
       '</div>';
 
     root.appendChild(overlay);
 
-    var zone =
-      overlay.querySelector('#uploadZone');
+    var zone = overlay.querySelector('#uploadZone');
+    var input = overlay.querySelector('#uploadInput');
+    var preview = overlay.querySelector('#uploadPreview');
+    var placeholder = overlay.querySelector(
+      '#uploadPlaceholder'
+    );
 
-    var input =
-      overlay.querySelector('#uploadInput');
-
-    var preview =
-      overlay.querySelector('#uploadPreview');
-
-    var placeholder =
-      overlay.querySelector('#uploadPlaceholder');
-
-    var analyzeBtn =
-      overlay.querySelector('#analyzeBtn');
-
-    var recBanner =
-      overlay.querySelector('#recBanner');
-
-    var userNoteField =
-      overlay.querySelector('#userNote');
+    var analyzeBtn = overlay.querySelector('#analyzeBtn');
+    var recBanner = overlay.querySelector('#recBanner');
+    var userNoteField = overlay.querySelector('#userNote');
 
     var uploadedBase64 = null;
     var uploadedMediaType = null;
@@ -1996,9 +1421,7 @@
       var reader = new FileReader();
 
       reader.onload = function (readerEvent) {
-        preview.src =
-          readerEvent.target.result;
-
+        preview.src = readerEvent.target.result;
         preview.style.display = 'block';
         placeholder.style.display = 'none';
 
@@ -2026,17 +1449,13 @@
 
       analyzeBtn.disabled = true;
 
-      var originalLabel =
-        analyzeBtn.innerHTML;
+      var originalLabel = analyzeBtn.innerHTML;
 
       analyzeBtn.textContent =
         'Analizando tu ambiente…';
 
-      var list =
-        overlay.querySelector('#catList');
-
-      var products =
-        overlay._products || [];
+      var list = overlay.querySelector('#catList');
+      var products = overlay._products || [];
 
       fetch(SITE_DOMAIN + '/api/recommend', {
         method: 'POST',
@@ -2047,7 +1466,6 @@
           imageBase64: uploadedBase64,
           imageMediaType: uploadedMediaType,
           userNote: userNoteField.value.trim(),
-
           products: products.map(function (product) {
             return {
               id: product.id,
@@ -2146,11 +1564,13 @@
       productA,
       productB
     ) {
-      var recommendationA =
-        recMap[productA.id] ? 1 : 0;
+      var recommendationA = recMap[productA.id]
+        ? 1
+        : 0;
 
-      var recommendationB =
-        recMap[productB.id] ? 1 : 0;
+      var recommendationB = recMap[productB.id]
+        ? 1
+        : 0;
 
       return recommendationB - recommendationA;
     });
@@ -2167,13 +1587,11 @@
           '" data-id="' +
           escapeHtml(product.id) +
           '">' +
-
           '  <div class="info">' +
           '    <strong>' +
           (isRecommended ? '✦ ' : '') +
           escapeHtml(product.name) +
           '</strong>' +
-
           '    <span>' +
           escapeHtml(product.price) +
           ' · ' +
@@ -2183,17 +1601,14 @@
           '×' +
           product.fondo +
           ' cm</span>' +
-
           (isRecommended
             ? '<div class="reason">' +
               escapeHtml(recMap[product.id]) +
               '</div>'
             : '') +
           '  </div>' +
-
           '  <div class="cat-actions">' +
           '    <button class="cat-btn-3d">Ver en 3D</button>' +
-
           '    <button class="cat-btn-gen">' +
           sparkIcon() +
           '      Generar imagen' +
@@ -2210,10 +1625,7 @@
         item
           .querySelector('.cat-btn-3d')
           .addEventListener('click', function () {
-            openAR(
-              arOverlay,
-              sorted[index]
-            );
+            openAR(arOverlay, sorted[index]);
           });
 
         item
@@ -2245,8 +1657,7 @@
       return;
     }
 
-    var originalLabel =
-      buttonElement.innerHTML;
+    var originalLabel = buttonElement.innerHTML;
 
     buttonElement.disabled = true;
     buttonElement.textContent = 'Preparando…';
@@ -2256,20 +1667,13 @@
         var snap =
           document.createElement('model-viewer');
 
-        snap.setAttribute(
-          'src',
-          product.model_url
-        );
-
+        snap.setAttribute('src', product.model_url);
         snap.setAttribute(
           'crossorigin',
           'anonymous'
         );
 
-        snap.setAttribute(
-          'exposure',
-          '1'
-        );
+        snap.setAttribute('exposure', '1');
 
         snap.setAttribute(
           'environment-image',
@@ -2310,8 +1714,7 @@
           snap.remove();
 
           buttonElement.disabled = false;
-          buttonElement.innerHTML =
-            originalLabel;
+          buttonElement.innerHTML = originalLabel;
 
           var recBanner =
             overlay.querySelector('#recBanner');
@@ -2384,8 +1787,7 @@
       })
       .catch(function () {
         buttonElement.disabled = false;
-        buttonElement.innerHTML =
-          originalLabel;
+        buttonElement.innerHTML = originalLabel;
       });
   }
 
@@ -2406,50 +1808,46 @@
       ? noteField.value.trim()
       : '';
 
-    fetch(
-      SITE_DOMAIN + '/api/generate-image',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          roomImageBase64:
-            overlay._uploadedPhoto.base64,
+    fetch(SITE_DOMAIN + '/api/generate-image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        roomImageBase64:
+          overlay._uploadedPhoto.base64,
 
-          roomImageMediaType:
-            overlay._uploadedPhoto.mediaType,
+        roomImageMediaType:
+          overlay._uploadedPhoto.mediaType,
 
-          productImageBase64:
-            productBase64,
+        productImageBase64:
+          productBase64,
 
-          productImageMediaType:
-            'image/png',
+        productImageMediaType:
+          'image/png',
 
-          productName:
-            product.name,
+        productName:
+          product.name,
 
-          alto:
-            product.alto,
+        alto:
+          product.alto,
 
-          ancho:
-            product.ancho,
+        ancho:
+          product.ancho,
 
-          fondo:
-            product.fondo,
+        fondo:
+          product.fondo,
 
-          userNote:
-            userNote
-        })
-      }
-    )
+        userNote:
+          userNote
+      })
+    })
       .then(function (response) {
         return response.json();
       })
       .then(function (data) {
         buttonElement.disabled = false;
-        buttonElement.innerHTML =
-          originalLabel;
+        buttonElement.innerHTML = originalLabel;
 
         var resultOverlay =
           overlay._resultOverlay;
@@ -2488,8 +1886,7 @@
       })
       .catch(function () {
         buttonElement.disabled = false;
-        buttonElement.innerHTML =
-          originalLabel;
+        buttonElement.innerHTML = originalLabel;
 
         var resultOverlay =
           overlay._resultOverlay;
@@ -2603,16 +2000,10 @@
           );
         })
         .then(function (product) {
-          buildFAB(
-            product,
-            storeId
-          );
+          buildFAB(product, storeId);
         })
         .catch(function () {
-          buildFAB(
-            null,
-            storeId
-          );
+          buildFAB(null, storeId);
         });
 
       return;
@@ -2622,10 +2013,7 @@
       var slug = slugFromUrl();
 
       if (!slug) {
-        buildFAB(
-          null,
-          storeId
-        );
+        buildFAB(null, storeId);
 
         return;
       }
@@ -2635,16 +2023,10 @@
         storeId
       )
         .then(function (product) {
-          buildFAB(
-            product,
-            storeId
-          );
+          buildFAB(product, storeId);
         })
         .catch(function () {
-          buildFAB(
-            null,
-            storeId
-          );
+          buildFAB(null, storeId);
         });
     }
   }
