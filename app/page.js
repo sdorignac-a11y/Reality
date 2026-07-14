@@ -1,93 +1,416 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 import { supabase } from '../lib/supabaseClient';
 
+function applyRealScale(modelViewer, alto, ancho, fondo) {
+  function doScale() {
+    try {
+      const dims = modelViewer.getDimensions();
+      const current = modelViewer.scale || { x: 1, y: 1, z: 1 };
+
+      const baseX = dims.x / (current.x || 1);
+      const baseY = dims.y / (current.y || 1);
+      const baseZ = dims.z / (current.z || 1);
+
+      const targetX = (Number(ancho) || 0) / 100;
+      const targetY = (Number(alto) || 0) / 100;
+      const targetZ = (Number(fondo) || 0) / 100;
+
+      const scaleX =
+        baseX > 0 && targetX > 0 ? targetX / baseX : 1;
+
+      const scaleY =
+        baseY > 0 && targetY > 0 ? targetY / baseY : 1;
+
+      const scaleZ =
+        baseZ > 0 && targetZ > 0 ? targetZ / baseZ : 1;
+
+      if (
+        ![scaleX, scaleY, scaleZ].every(
+          (number) => isFinite(number) && number > 0
+        )
+      ) {
+        return;
+      }
+
+      modelViewer.setAttribute(
+        'scale',
+        `${scaleX} ${scaleY} ${scaleZ}`
+      );
+    } catch (error) {
+      // Mantiene la escala original si ocurre un error.
+    }
+  }
+
+  modelViewer.addEventListener('load', doScale);
+
+  if (modelViewer.loaded) {
+    doScale();
+  }
+
+  return () => {
+    modelViewer.removeEventListener('load', doScale);
+  };
+}
+
+function placeMeasurementAnchors(viewer, product) {
+  if (!viewer || !product) return;
+
+  try {
+    const dims = viewer.getDimensions();
+    const center = viewer.getBoundingBoxCenter();
+
+    const halfWidth = dims.x / 2;
+    const halfHeight = dims.y / 2;
+    const halfDepth = dims.z / 2;
+
+    const points = {
+      'hotspot-alto-top':
+        `${center.x - halfWidth} ` +
+        `${center.y + halfHeight} ` +
+        `${center.z + halfDepth}`,
+
+      'hotspot-alto-bottom':
+        `${center.x - halfWidth} ` +
+        `${center.y - halfHeight} ` +
+        `${center.z + halfDepth}`,
+
+      'hotspot-ancho-left':
+        `${center.x - halfWidth} ` +
+        `${center.y + halfHeight} ` +
+        `${center.z + halfDepth}`,
+
+      'hotspot-ancho-right':
+        `${center.x + halfWidth} ` +
+        `${center.y + halfHeight} ` +
+        `${center.z + halfDepth}`,
+
+      'hotspot-fondo-near':
+        `${center.x + halfWidth} ` +
+        `${center.y + halfHeight} ` +
+        `${center.z + halfDepth}`,
+
+      'hotspot-fondo-far':
+        `${center.x + halfWidth} ` +
+        `${center.y + halfHeight} ` +
+        `${center.z - halfDepth}`,
+    };
+
+    Object.entries(points).forEach(([name, position]) => {
+      const element = viewer.querySelector(`[slot="${name}"]`);
+
+      if (element) {
+        element.setAttribute('data-position', position);
+      }
+
+      if (viewer.updateHotspot) {
+        viewer.updateHotspot({
+          name,
+          position,
+        });
+      }
+    });
+
+    viewer._dimValues = {
+      alto: `${product.alto} cm`,
+      ancho: `${product.ancho} cm`,
+      fondo: `${product.fondo} cm`,
+    };
+  } catch (error) {
+    // No muestra las medidas si ocurre un error.
+  }
+}
+
+function escapeHtml(value) {
+  return String(value).replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[character]
+  );
+}
+
+function drawDimensionLines(svg, viewer) {
+  if (!svg || !viewer.queryHotspot || !viewer._dimValues) {
+    return;
+  }
+
+  const rect = viewer.getBoundingClientRect();
+
+  svg.setAttribute(
+    'viewBox',
+    `0 0 ${rect.width} ${rect.height}`
+  );
+
+  function getPoint(name) {
+    const hotspot = viewer.queryHotspot(name);
+
+    return hotspot?.canvasPosition || null;
+  }
+
+  function createDimensionLine(fromName, toName, label) {
+    const start = getPoint(fromName);
+    const end = getPoint(toName);
+
+    if (!start || !end) return '';
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    const perpendicularX = (-dy / length) * 6;
+    const perpendicularY = (dx / length) * 6;
+
+    const middleX = (start.x + end.x) / 2;
+    const middleY = (start.y + end.y) / 2;
+    const labelWidth = label.length * 6.2 + 14;
+
+    return (
+      `<line ` +
+      `x1="${start.x}" ` +
+      `y1="${start.y}" ` +
+      `x2="${end.x}" ` +
+      `y2="${end.y}">` +
+      `</line>` +
+
+      `<line class="dim-tick" ` +
+      `x1="${start.x - perpendicularX}" ` +
+      `y1="${start.y - perpendicularY}" ` +
+      `x2="${start.x + perpendicularX}" ` +
+      `y2="${start.y + perpendicularY}">` +
+      `</line>` +
+
+      `<line class="dim-tick" ` +
+      `x1="${end.x - perpendicularX}" ` +
+      `y1="${end.y - perpendicularY}" ` +
+      `x2="${end.x + perpendicularX}" ` +
+      `y2="${end.y + perpendicularY}">` +
+      `</line>` +
+
+      `<rect class="dim-label-bg" ` +
+      `x="${middleX - labelWidth / 2}" ` +
+      `y="${middleY - 10}" ` +
+      `width="${labelWidth}" ` +
+      `height="20" ` +
+      `rx="10">` +
+      `</rect>` +
+
+      `<text ` +
+      `x="${middleX}" ` +
+      `y="${middleY + 4}" ` +
+      `text-anchor="middle">` +
+      `${escapeHtml(label)}` +
+      `</text>`
+    );
+  }
+
+  svg.innerHTML =
+    createDimensionLine(
+      'hotspot-alto-top',
+      'hotspot-alto-bottom',
+      viewer._dimValues.alto
+    ) +
+    createDimensionLine(
+      'hotspot-ancho-left',
+      'hotspot-ancho-right',
+      viewer._dimValues.ancho
+    ) +
+    createDimensionLine(
+      'hotspot-fondo-near',
+      'hotspot-fondo-far',
+      viewer._dimValues.fondo
+    );
+}
+
 export default function HomePage() {
   const [products, setProducts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [showingDims, setShowingDims] = useState(false);
+
   const selected = products[selectedIndex] || null;
+
+  const demoViewerRef = useRef(null);
+  const demoSvgRef = useRef(null);
 
   useEffect(() => {
     supabase
       .from('products')
       .select('*')
       .eq('status', 'published')
-      .order('created_at', { ascending: false })
+      .order('created_at', {
+        ascending: false,
+      })
       .then(({ data }) => {
-        if (data) setProducts(data);
+        if (data) {
+          setProducts(data);
+        }
       });
   }, []);
 
   useEffect(() => {
-    if (window.lucide) window.lucide.createIcons();
-  }, [products, selectedIndex]);
+    if (!selected || !demoViewerRef.current) {
+      return;
+    }
+
+    return applyRealScale(
+      demoViewerRef.current,
+      selected.alto,
+      selected.ancho,
+      selected.fondo
+    );
+  }, [selected]);
 
   useEffect(() => {
-    document.title = 'Reality — Probá los muebles en tu casa';
+    setShowingDims(false);
+  }, [selectedIndex]);
 
-    if (window.lucide) window.lucide.createIcons();
+  useEffect(() => {
+    const viewer = demoViewerRef.current;
+    const svg = demoSvgRef.current;
 
-    const menuButton = document.getElementById('menuButton');
-    const navLinks = document.getElementById('navLinks');
-    const pilotForm = document.getElementById('pilotForm');
+    if (!viewer || !svg || !selected || !showingDims) {
+      return;
+    }
 
-    if (!menuButton || !navLinks || !pilotForm) return;
+    const redraw = () => {
+      placeMeasurementAnchors(viewer, selected);
+      drawDimensionLines(svg, viewer);
+    };
+
+    viewer.addEventListener('load', redraw);
+    viewer.addEventListener('camera-change', redraw);
+    window.addEventListener('resize', redraw);
+
+    requestAnimationFrame(redraw);
+
+    return () => {
+      viewer.removeEventListener('load', redraw);
+      viewer.removeEventListener('camera-change', redraw);
+      window.removeEventListener('resize', redraw);
+    };
+  }, [showingDims, selected]);
+
+  useEffect(() => {
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+  }, [products, selectedIndex, showingDims]);
+
+  useEffect(() => {
+    document.title =
+      'Reality — Probá los muebles en tu casa';
+
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+
+    const menuButton =
+      document.getElementById('menuButton');
+
+    const navLinks =
+      document.getElementById('navLinks');
+
+    const pilotForm =
+      document.getElementById('pilotForm');
+
+    const toast =
+      document.getElementById('toast');
+
+    const toastTitle =
+      document.getElementById('toastTitle');
+
+    const toastMessage =
+      document.getElementById('toastMessage');
+
+    if (
+      !menuButton ||
+      !navLinks ||
+      !pilotForm ||
+      !toast ||
+      !toastTitle ||
+      !toastMessage
+    ) {
+      return;
+    }
 
     function handleMenuClick() {
-      const isOpen = navLinks.classList.toggle('open');
+      const isOpen =
+        navLinks.classList.toggle('open');
 
-      menuButton.setAttribute('aria-expanded', String(isOpen));
+      menuButton.setAttribute(
+        'aria-expanded',
+        String(isOpen)
+      );
+
       menuButton.innerHTML = isOpen
         ? '<i data-lucide="x"></i>'
         : '<i data-lucide="menu"></i>';
 
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
     }
 
-    menuButton.addEventListener('click', handleMenuClick);
+    menuButton.addEventListener(
+      'click',
+      handleMenuClick
+    );
 
-    const navLinkEls = navLinks.querySelectorAll('a');
+    const navLinkElements =
+      navLinks.querySelectorAll('a');
 
     function closeMenu() {
       navLinks.classList.remove('open');
-      menuButton.setAttribute('aria-expanded', 'false');
-      menuButton.innerHTML = '<i data-lucide="menu"></i>';
 
-      if (window.lucide) window.lucide.createIcons();
+      menuButton.setAttribute(
+        'aria-expanded',
+        'false'
+      );
+
+      menuButton.innerHTML =
+        '<i data-lucide="menu"></i>';
+
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
     }
 
-    navLinkEls.forEach((link) => {
+    navLinkElements.forEach((link) => {
       link.addEventListener('click', closeMenu);
     });
 
-    const revealObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-            revealObserver.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.14 }
-    );
+    const revealObserver =
+      new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              revealObserver.unobserve(entry.target);
+            }
+          });
+        },
+        {
+          threshold: 0.14,
+        }
+      );
 
-    document.querySelectorAll('.reveal').forEach((el) => {
-      revealObserver.observe(el);
-    });
-
-    const toast = document.getElementById('toast');
-    const toastTitle = document.getElementById('toastTitle');
-    const toastMessage = document.getElementById('toastMessage');
+    document
+      .querySelectorAll('.reveal')
+      .forEach((element) => {
+        revealObserver.observe(element);
+      });
 
     let toastTimer;
 
     function showToast(title, message) {
-      if (!toast || !toastTitle || !toastMessage) return;
-
       clearTimeout(toastTimer);
 
       toastTitle.textContent = title;
@@ -102,46 +425,56 @@ export default function HomePage() {
     async function handlePilotSubmit(event) {
       event.preventDefault();
 
-      const businessName = document
-        .getElementById('businessName')
-        ?.value.trim();
+      const businessName =
+        document
+          .getElementById('businessName')
+          ?.value.trim() || '';
 
-      const contactEmail = document
-        .getElementById('contactEmail')
-        ?.value.trim();
+      const contactEmail =
+        document
+          .getElementById('contactEmail')
+          ?.value.trim() || '';
 
-      const website = document
-        .getElementById('website')
-        ?.value.trim();
+      const website =
+        document
+          .getElementById('website')
+          ?.value.trim() || '';
 
-      const submitButton = event.currentTarget.querySelector(
-        'button[type="submit"]'
-      );
+      const submitButton =
+        event.currentTarget.querySelector(
+          'button[type="submit"]'
+        );
 
       if (!submitButton) return;
 
-      const originalLabel = submitButton.innerHTML;
+      const originalLabel =
+        submitButton.innerHTML;
 
       submitButton.disabled = true;
       submitButton.textContent = 'Enviando…';
 
       try {
-        const res = await fetch('/api/pilot-lead', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            businessName,
-            contactEmail,
-            website,
-          }),
-        });
+        const response = await fetch(
+          '/api/pilot-lead',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              businessName,
+              contactEmail,
+              website,
+            }),
+          }
+        );
 
-        const data = await res.json();
+        const data = await response.json();
 
-        if (!res.ok || data.error) {
-          throw new Error(data.error || 'No se pudo enviar');
+        if (!response.ok || data.error) {
+          throw new Error(
+            data.error || 'No se pudo enviar'
+          );
         }
 
         showToast(
@@ -159,28 +492,46 @@ export default function HomePage() {
         submitButton.disabled = false;
         submitButton.innerHTML = originalLabel;
 
-        if (window.lucide) window.lucide.createIcons();
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
       }
     }
 
-    pilotForm.addEventListener('submit', handlePilotSubmit);
+    pilotForm.addEventListener(
+      'submit',
+      handlePilotSubmit
+    );
 
     return () => {
       clearTimeout(toastTimer);
       revealObserver.disconnect();
 
-      menuButton.removeEventListener('click', handleMenuClick);
-      pilotForm.removeEventListener('submit', handlePilotSubmit);
+      menuButton.removeEventListener(
+        'click',
+        handleMenuClick
+      );
 
-      navLinkEls.forEach((link) => {
-        link.removeEventListener('click', closeMenu);
+      pilotForm.removeEventListener(
+        'submit',
+        handlePilotSubmit
+      );
+
+      navLinkElements.forEach((link) => {
+        link.removeEventListener(
+          'click',
+          closeMenu
+        );
       });
     };
   }, []);
 
   return (
     <>
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link
+        rel="preconnect"
+        href="https://fonts.googleapis.com"
+      />
 
       <link
         rel="preconnect"
@@ -364,8 +715,8 @@ export default function HomePage() {
           border: 0;
           border-radius: 13px;
           cursor: pointer;
-          font-weight: 900;
           font-size: 0.88rem;
+          font-weight: 900;
           transition:
             transform 0.2s ease,
             box-shadow 0.2s ease,
@@ -383,17 +734,20 @@ export default function HomePage() {
             var(--blue-600),
             #0f5fe6
           );
-          box-shadow: 0 10px 22px rgba(29, 108, 232, 0.28);
+          box-shadow:
+            0 10px 22px rgba(29, 108, 232, 0.28);
         }
 
         .btn-primary:hover {
-          box-shadow: 0 14px 28px rgba(29, 108, 232, 0.34);
+          box-shadow:
+            0 14px 28px rgba(29, 108, 232, 0.34);
         }
 
         .btn-secondary {
           color: var(--blue-700);
           background: rgba(255, 255, 255, 0.95);
-          border: 1px solid rgba(49, 126, 235, 0.14);
+          border:
+            1px solid rgba(49, 126, 235, 0.14);
           box-shadow: var(--shadow-sm);
         }
 
@@ -426,10 +780,13 @@ export default function HomePage() {
           justify-content: space-between;
           gap: 20px;
           padding: 8px 10px 8px 15px;
-          border: 1px solid rgba(32, 112, 232, 0.1);
+          border:
+            1px solid rgba(32, 112, 232, 0.1);
           border-radius: 18px;
-          background: rgba(255, 255, 255, 0.83);
-          box-shadow: 0 12px 36px rgba(42, 91, 161, 0.09);
+          background:
+            rgba(255, 255, 255, 0.83);
+          box-shadow:
+            0 12px 36px rgba(42, 91, 161, 0.09);
           backdrop-filter: blur(20px);
           pointer-events: auto;
         }
@@ -450,7 +807,8 @@ export default function HomePage() {
           border-radius: 10px;
           color: var(--blue-600);
           background: var(--white);
-          box-shadow: inset 0 0 0 3px var(--blue-100);
+          box-shadow:
+            inset 0 0 0 3px var(--blue-100);
         }
 
         .logo-mark i {
@@ -470,9 +828,9 @@ export default function HomePage() {
           align-items: center;
           justify-content: center;
           gap: 20px;
+          color: var(--navy);
           font-size: 0.82rem;
           font-weight: 900;
-          color: var(--navy);
         }
 
         .nav-links a {
@@ -526,8 +884,10 @@ export default function HomePage() {
           width: 300px;
           height: 300px;
           border-radius: 50%;
-          background: rgba(193, 221, 255, 0.35);
-          box-shadow: 0 0 90px rgba(91, 157, 242, 0.08);
+          background:
+            rgba(193, 221, 255, 0.35);
+          box-shadow:
+            0 0 90px rgba(91, 157, 242, 0.08);
           pointer-events: none;
         }
 
@@ -540,7 +900,8 @@ export default function HomePage() {
           width: 760px;
           height: 440px;
           border-radius: 50%;
-          background: rgba(255, 255, 255, 0.58);
+          background:
+            rgba(255, 255, 255, 0.58);
           filter: blur(34px);
           transform: translateX(-50%);
           pointer-events: none;
@@ -549,7 +910,8 @@ export default function HomePage() {
         .hero-content {
           position: relative;
           z-index: 5;
-          width: min(800px, calc(100% - 32px));
+          width:
+            min(800px, calc(100% - 32px));
           max-width: 800px;
           margin: 0 auto;
           text-align: center;
@@ -558,11 +920,14 @@ export default function HomePage() {
         .hero .eyebrow {
           margin-bottom: 22px;
           padding: 10px 17px;
-          border-color: rgba(35, 113, 229, 0.1);
+          border-color:
+            rgba(35, 113, 229, 0.1);
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.95);
+          background:
+            rgba(255, 255, 255, 0.95);
           font-size: 0.86rem;
-          box-shadow: 0 10px 30px rgba(47, 94, 167, 0.08);
+          box-shadow:
+            0 10px 30px rgba(47, 94, 167, 0.08);
         }
 
         .hero .eyebrow i {
@@ -573,7 +938,8 @@ export default function HomePage() {
         .hero h1 {
           margin-bottom: 24px;
           color: #14366f;
-          font-size: clamp(3.35rem, 5.5vw, 5.05rem);
+          font-size:
+            clamp(3.35rem, 5.5vw, 5.05rem);
           font-weight: 800;
           line-height: 0.96;
           letter-spacing: -0.042em;
@@ -604,7 +970,8 @@ export default function HomePage() {
           max-width: 660px;
           margin: 0 auto 27px;
           color: #536c96;
-          font-size: clamp(1rem, 1.3vw, 1.12rem);
+          font-size:
+            clamp(1rem, 1.3vw, 1.12rem);
           line-height: 1.62;
         }
 
@@ -625,17 +992,21 @@ export default function HomePage() {
         }
 
         .hero-actions .btn-primary {
-          background: linear-gradient(
-            180deg,
-            #3188f8 0%,
-            #1267ec 100%
-          );
-          box-shadow: 0 15px 30px rgba(28, 105, 228, 0.28);
+          background:
+            linear-gradient(
+              180deg,
+              #3188f8 0%,
+              #1267ec 100%
+            );
+          box-shadow:
+            0 15px 30px rgba(28, 105, 228, 0.28);
         }
 
         .hero-actions .btn-secondary {
-          background: rgba(255, 255, 255, 0.96);
-          box-shadow: 0 11px 28px rgba(46, 87, 148, 0.09);
+          background:
+            rgba(255, 255, 255, 0.96);
+          box-shadow:
+            0 11px 28px rgba(46, 87, 148, 0.09);
         }
 
         .hero-pills {
@@ -651,13 +1022,16 @@ export default function HomePage() {
           align-items: center;
           gap: 8px;
           padding: 0 16px;
-          border: 1px solid rgba(43, 121, 239, 0.09);
+          border:
+            1px solid rgba(43, 121, 239, 0.09);
           border-radius: 14px;
           color: var(--blue-700);
-          background: rgba(255, 255, 255, 0.93);
+          background:
+            rgba(255, 255, 255, 0.93);
           font-size: 0.78rem;
           font-weight: 900;
-          box-shadow: 0 10px 28px rgba(43, 89, 160, 0.08);
+          box-shadow:
+            0 10px 28px rgba(43, 89, 160, 0.08);
           backdrop-filter: blur(14px);
         }
 
@@ -670,28 +1044,37 @@ export default function HomePage() {
           position: absolute;
           z-index: 2;
           bottom: 91px;
-          width: clamp(250px, 23vw, 380px);
+          width:
+            clamp(250px, 23vw, 380px);
           pointer-events: none;
-          user-select: none;
-          filter: drop-shadow(
-            0 24px 30px rgba(37, 77, 132, 0.12)
-          );
+          filter:
+            drop-shadow(
+              0 24px 30px rgba(37, 77, 132, 0.12)
+            );
         }
 
         .hero-scene img {
           width: 100%;
           height: auto;
           display: block;
-          object-fit: contain;
         }
 
         .hero-scene-left {
-          left: max(-5px, calc((100vw - 1540px) / 2));
+          left:
+            max(
+              -5px,
+              calc((100vw - 1540px) / 2)
+            );
         }
 
         .hero-scene-right {
-          right: max(-5px, calc((100vw - 1540px) / 2));
-          width: clamp(270px, 24vw, 400px);
+          right:
+            max(
+              -5px,
+              calc((100vw - 1540px) / 2)
+            );
+          width:
+            clamp(270px, 24vw, 400px);
         }
 
         .hero-dots {
@@ -702,11 +1085,12 @@ export default function HomePage() {
           width: 132px;
           height: 82px;
           opacity: 0.5;
-          background-image: radial-gradient(
-            circle,
-            #6ca5f1 2.3px,
-            transparent 2.6px
-          );
+          background-image:
+            radial-gradient(
+              circle,
+              #6ca5f1 2.3px,
+              transparent 2.6px
+            );
           background-size: 24px 24px;
           pointer-events: none;
         }
@@ -728,7 +1112,8 @@ export default function HomePage() {
 
         .comparison-grid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
           gap: 16px;
         }
 
@@ -738,7 +1123,8 @@ export default function HomePage() {
           min-height: 270px;
           padding: 18px;
           border-radius: 20px;
-          border: 1px solid rgba(40, 95, 178, 0.08);
+          border:
+            1px solid rgba(40, 95, 178, 0.08);
           box-shadow: var(--shadow-sm);
         }
 
@@ -836,7 +1222,8 @@ export default function HomePage() {
           border-radius: 16px;
           background-position: center;
           background-size: cover;
-          box-shadow: 0 12px 22px rgba(35, 65, 108, 0.14);
+          box-shadow:
+            0 12px 22px rgba(35, 65, 108, 0.14);
         }
 
         .bad .comparison-image {
@@ -846,7 +1233,8 @@ export default function HomePage() {
               rgba(67, 71, 78, 0.13)
             ),
             url("https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=88");
-          filter: grayscale(0.5) saturate(0.75);
+          filter:
+            grayscale(0.5) saturate(0.75);
         }
 
         .good .comparison-image {
@@ -869,7 +1257,8 @@ export default function HomePage() {
           border: 3px solid var(--white);
           border-radius: 50%;
           color: var(--white);
-          box-shadow: 0 10px 24px rgba(30, 62, 111, 0.22);
+          box-shadow:
+            0 10px 24px rgba(30, 62, 111, 0.22);
         }
 
         .bad .comparison-badge {
@@ -883,7 +1272,8 @@ export default function HomePage() {
         .steps {
           position: relative;
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns:
+            repeat(3, minmax(0, 1fr));
           gap: 18px;
         }
 
@@ -891,9 +1281,11 @@ export default function HomePage() {
           position: relative;
           min-height: 250px;
           padding: 22px 18px 18px;
-          border: 1px solid rgba(32, 114, 233, 0.1);
+          border:
+            1px solid rgba(32, 114, 233, 0.1);
           border-radius: 20px;
-          background: rgba(255, 255, 255, 0.92);
+          background:
+            rgba(255, 255, 255, 0.92);
           text-align: center;
           box-shadow: var(--shadow-sm);
           transition:
@@ -917,15 +1309,17 @@ export default function HomePage() {
           border: 3px solid #f7fbff;
           border-radius: 50%;
           color: var(--white);
-          background: linear-gradient(
-            135deg,
-            var(--blue-500),
-            var(--blue-700)
-          );
+          background:
+            linear-gradient(
+              135deg,
+              var(--blue-500),
+              var(--blue-700)
+            );
           font-family: "Baloo 2", sans-serif;
           font-size: 1.02rem;
           font-weight: 800;
-          box-shadow: 0 8px 18px rgba(27, 105, 224, 0.28);
+          box-shadow:
+            0 8px 18px rgba(27, 105, 224, 0.28);
           transform: translateX(-50%);
         }
 
@@ -943,11 +1337,12 @@ export default function HomePage() {
           width: 98px;
           height: 84px;
           border-radius: 18px;
-          background: linear-gradient(
-            145deg,
-            #ffffff,
-            var(--blue-100)
-          );
+          background:
+            linear-gradient(
+              145deg,
+              #ffffff,
+              var(--blue-100)
+            );
           box-shadow: var(--shadow-sm);
         }
 
@@ -979,7 +1374,11 @@ export default function HomePage() {
               rgba(144, 196, 255, 0.22),
               transparent 30%
             ),
-            linear-gradient(135deg, #f6fbff, #edf6ff);
+            linear-gradient(
+              135deg,
+              #f6fbff,
+              #edf6ff
+            );
         }
 
         .demo-layout {
@@ -998,7 +1397,8 @@ export default function HomePage() {
 
         .demo-intro h2 {
           margin-bottom: 10px;
-          font-size: clamp(1.7rem, 3vw, 2.4rem);
+          font-size:
+            clamp(1.7rem, 3vw, 2.4rem);
           font-weight: 800;
         }
 
@@ -1014,9 +1414,11 @@ export default function HomePage() {
           gap: 9px;
           margin-top: 12px;
           padding: 11px;
-          border: 1px solid rgba(44, 119, 231, 0.1);
+          border:
+            1px solid rgba(44, 119, 231, 0.1);
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.68);
+          background:
+            rgba(255, 255, 255, 0.68);
           font-size: 0.78rem;
           box-shadow: var(--shadow-sm);
         }
@@ -1033,7 +1435,8 @@ export default function HomePage() {
           display: grid;
           grid-template-columns: 230px 1fr;
           min-height: 400px;
-          border: 6px solid rgba(255, 255, 255, 0.95);
+          border:
+            6px solid rgba(255, 255, 255, 0.95);
           border-radius: 24px;
           background: var(--white);
           box-shadow: var(--shadow-lg);
@@ -1043,8 +1446,10 @@ export default function HomePage() {
           position: relative;
           z-index: 4;
           padding: 18px 16px;
-          border-right: 1px solid rgba(26, 91, 184, 0.09);
-          background: rgba(255, 255, 255, 0.98);
+          border-right:
+            1px solid rgba(26, 91, 184, 0.09);
+          background:
+            rgba(255, 255, 255, 0.98);
           display: flex;
           flex-direction: column;
         }
@@ -1074,7 +1479,8 @@ export default function HomePage() {
           align-items: flex-start;
           gap: 1px;
           padding: 9px 10px;
-          border: 1px solid rgba(23, 73, 143, 0.1);
+          border:
+            1px solid rgba(23, 73, 143, 0.1);
           border-radius: 11px;
           background: var(--white);
           cursor: pointer;
@@ -1105,39 +1511,74 @@ export default function HomePage() {
         }
 
         .empty-note {
-          font-size: 0.8rem;
-          color: var(--muted);
-          text-align: center;
           padding: 10px 4px;
+          color: var(--muted);
+          font-size: 0.8rem;
+          text-align: center;
         }
 
-        .measurements {
-          display: grid;
-          gap: 8px;
-          margin-bottom: 16px;
+        .dims-toggle-btn {
+          width: 100%;
+          min-height: 40px;
           margin-top: auto;
-        }
-
-        .measure {
+          margin-bottom: 14px;
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          color: #5d6f8c;
-          font-size: 0.76rem;
-          font-weight: 800;
+          justify-content: center;
+          gap: 7px;
+          padding: 0 12px;
+          border: 1.5px solid #cddaf0;
+          border-radius: 999px;
+          color: var(--blue-700);
+          background: var(--white);
+          font-size: 0.7rem;
+          font-weight: 900;
+          cursor: pointer;
+          transition:
+            background 0.2s ease,
+            border-color 0.2s ease;
         }
 
-        .measure span:first-child {
-          display: flex;
-          align-items: center;
-          gap: 5px;
+        .dims-toggle-btn:hover {
+          background: var(--blue-50);
+          border-color: var(--blue-300);
         }
 
-        .measure i {
+        .dims-toggle-btn i {
           width: 14px;
           height: 14px;
-          color: var(--blue-700);
+        }
+
+        .demo-dim-svg {
+          position: absolute;
+          z-index: 4;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+        }
+
+        .demo-dim-svg line {
+          stroke: var(--blue-700);
+          stroke-width: 1.5;
+        }
+
+        .demo-dim-svg .dim-tick {
+          stroke: var(--blue-700);
+          stroke-width: 1.5;
+        }
+
+        .demo-dim-svg text {
+          font-family: "Nunito", sans-serif;
+          font-size: 11px;
+          font-weight: 900;
+          fill: var(--navy);
+        }
+
+        .demo-dim-svg .dim-label-bg {
+          fill: rgba(255, 255, 255, 0.96);
+          stroke: #cddaf0;
+          stroke-width: 1;
         }
 
         .powered-by {
@@ -1162,11 +1603,11 @@ export default function HomePage() {
         }
 
         .ar-real-btn {
-          background: var(--blue-600);
-          color: #fff;
-          border: none;
           padding: 10px 16px;
+          border: none;
           border-radius: 999px;
+          background: var(--blue-600);
+          color: #ffffff;
           font-size: 0.8rem;
           font-weight: 800;
           cursor: pointer;
@@ -1182,7 +1623,8 @@ export default function HomePage() {
           gap: 6px;
           padding: 6px 9px;
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.9);
+          background:
+            rgba(255, 255, 255, 0.9);
           color: var(--blue-700);
           font-size: 0.66rem;
           font-weight: 900;
@@ -1197,20 +1639,23 @@ export default function HomePage() {
 
         .benefits-grid {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns:
+            repeat(4, minmax(0, 1fr));
           gap: 14px;
         }
 
         .benefit-card {
           min-height: 185px;
           padding: 20px 16px;
-          border: 1px solid rgba(37, 111, 222, 0.1);
+          border:
+            1px solid rgba(37, 111, 222, 0.1);
           border-radius: 18px;
-          background: linear-gradient(
-            180deg,
-            rgba(255, 255, 255, 0.98),
-            rgba(245, 250, 255, 0.94)
-          );
+          background:
+            linear-gradient(
+              180deg,
+              rgba(255, 255, 255, 0.98),
+              rgba(245, 250, 255, 0.94)
+            );
           text-align: center;
           box-shadow: var(--shadow-sm);
           transition:
@@ -1232,7 +1677,9 @@ export default function HomePage() {
           border-radius: 18px;
           color: var(--blue-600);
           background: var(--blue-100);
-          box-shadow: inset 0 0 0 1px rgba(44, 124, 242, 0.1);
+          box-shadow:
+            inset 0 0 0 1px
+            rgba(44, 124, 242, 0.1);
         }
 
         .benefit-icon i {
@@ -1282,14 +1729,16 @@ export default function HomePage() {
               #0d58d8 62%,
               #1249b3
             );
-          box-shadow: 0 22px 52px rgba(28, 91, 194, 0.25);
+          box-shadow:
+            0 22px 52px rgba(28, 91, 194, 0.25);
         }
 
         .cta-card::before,
         .cta-card::after {
           content: "✦";
           position: absolute;
-          color: rgba(255, 255, 255, 0.25);
+          color:
+            rgba(255, 255, 255, 0.25);
           font-size: 3rem;
         }
 
@@ -1313,14 +1762,16 @@ export default function HomePage() {
           max-width: 560px;
           margin-bottom: 10px;
           color: var(--white);
-          font-size: clamp(1.9rem, 3.5vw, 2.8rem);
+          font-size:
+            clamp(1.9rem, 3.5vw, 2.8rem);
           font-weight: 800;
         }
 
         .cta-copy p {
           max-width: 480px;
           margin-bottom: 18px;
-          color: rgba(255, 255, 255, 0.83);
+          color:
+            rgba(255, 255, 255, 0.83);
           font-size: 0.9rem;
         }
 
@@ -1341,9 +1792,15 @@ export default function HomePage() {
           margin-left: -7px;
           display: grid;
           place-items: center;
-          border: 2px solid rgba(255, 255, 255, 0.9);
+          border:
+            2px solid rgba(255, 255, 255, 0.9);
           border-radius: 50%;
-          background: linear-gradient(135deg, #d8eaff, #91bfff);
+          background:
+            linear-gradient(
+              135deg,
+              #d8eaff,
+              #91bfff
+            );
           color: var(--blue-900);
           font-size: 0.66rem;
           font-weight: 900;
@@ -1354,7 +1811,8 @@ export default function HomePage() {
         }
 
         .pilot-proof span {
-          color: rgba(255, 255, 255, 0.86);
+          color:
+            rgba(255, 255, 255, 0.86);
           font-size: 0.74rem;
           font-weight: 800;
         }
@@ -1363,9 +1821,11 @@ export default function HomePage() {
           position: relative;
           z-index: 3;
           padding: 18px;
-          border: 1px solid rgba(255, 255, 255, 0.18);
+          border:
+            1px solid rgba(255, 255, 255, 0.18);
           border-radius: 20px;
-          background: rgba(255, 255, 255, 0.14);
+          background:
+            rgba(255, 255, 255, 0.14);
           backdrop-filter: blur(14px);
         }
 
@@ -1382,7 +1842,8 @@ export default function HomePage() {
         }
 
         .field label {
-          color: rgba(255, 255, 255, 0.88);
+          color:
+            rgba(255, 255, 255, 0.88);
           font-size: 0.7rem;
           font-weight: 900;
         }
@@ -1391,11 +1852,13 @@ export default function HomePage() {
           width: 100%;
           height: 40px;
           padding: 0 12px;
-          border: 1px solid rgba(255, 255, 255, 0.22);
+          border:
+            1px solid rgba(255, 255, 255, 0.22);
           border-radius: 11px;
           outline: none;
           color: var(--navy);
-          background: rgba(255, 255, 255, 0.94);
+          background:
+            rgba(255, 255, 255, 0.94);
           font-size: 0.86rem;
           transition:
             box-shadow 0.2s ease,
@@ -1404,7 +1867,8 @@ export default function HomePage() {
 
         .field input:focus {
           border-color: #9bc7ff;
-          box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2);
+          box-shadow:
+            0 0 0 4px rgba(255, 255, 255, 0.2);
         }
 
         .pilot-form .btn {
@@ -1438,14 +1902,17 @@ export default function HomePage() {
           z-index: 3000;
           right: 24px;
           bottom: 24px;
-          max-width: min(380px, calc(100% - 48px));
+          max-width:
+            min(380px, calc(100% - 48px));
           display: flex;
           align-items: flex-start;
           gap: 12px;
           padding: 16px 18px;
-          border: 1px solid rgba(45, 124, 242, 0.14);
+          border:
+            1px solid rgba(45, 124, 242, 0.14);
           border-radius: 18px;
-          background: rgba(255, 255, 255, 0.95);
+          background:
+            rgba(255, 255, 255, 0.95);
           box-shadow: var(--shadow-lg);
           backdrop-filter: blur(12px);
           opacity: 0;
@@ -1470,8 +1937,8 @@ export default function HomePage() {
 
         .toast strong {
           display: block;
-          color: var(--navy);
           margin-bottom: 2px;
+          color: var(--navy);
         }
 
         .toast span {
@@ -1502,17 +1969,20 @@ export default function HomePage() {
           }
 
           .hero h1 {
-            font-size: clamp(3.1rem, 5.7vw, 4.55rem);
+            font-size:
+              clamp(3.1rem, 5.7vw, 4.55rem);
           }
 
           .hero-scene {
             bottom: 80px;
-            width: clamp(220px, 24vw, 300px);
+            width:
+              clamp(220px, 24vw, 300px);
             opacity: 0.92;
           }
 
           .hero-scene-right {
-            width: clamp(235px, 25vw, 320px);
+            width:
+              clamp(235px, 25vw, 320px);
           }
         }
 
@@ -1543,7 +2013,8 @@ export default function HomePage() {
           }
 
           .benefits-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
           }
 
           .cta-card {
@@ -1594,9 +2065,11 @@ export default function HomePage() {
             display: grid;
             gap: 2px;
             padding: 12px;
-            border: 1px solid rgba(31, 103, 214, 0.1);
+            border:
+              1px solid rgba(31, 103, 214, 0.1);
             border-radius: 18px;
-            background: rgba(255, 255, 255, 0.97);
+            background:
+              rgba(255, 255, 255, 0.97);
             box-shadow: var(--shadow-md);
             opacity: 0;
             visibility: hidden;
@@ -1649,7 +2122,8 @@ export default function HomePage() {
 
           .product-panel {
             border-right: 0;
-            border-bottom: 1px solid rgba(26, 91, 184, 0.09);
+            border-bottom:
+              1px solid rgba(26, 91, 184, 0.09);
           }
 
           .ar-stage {
@@ -1685,7 +2159,8 @@ export default function HomePage() {
 
           .hero h1 {
             margin-bottom: 22px;
-            font-size: clamp(2.7rem, 13vw, 3.75rem);
+            font-size:
+              clamp(2.7rem, 13vw, 3.75rem);
             line-height: 0.98;
           }
 
@@ -1739,7 +2214,8 @@ export default function HomePage() {
 
         @media (max-width: 560px) {
           :root {
-            --container: min(100% - 22px, 1180px);
+            --container:
+              min(100% - 22px, 1180px);
           }
 
           .section {
@@ -1820,14 +2296,30 @@ export default function HomePage() {
               <i data-lucide="armchair"></i>
             </span>
 
-            <span className="brand">Reality</span>
+            <span className="brand">
+              Reality
+            </span>
           </a>
 
-          <div className="nav-links" id="navLinks">
-            <a href="#problema">El problema</a>
-            <a href="#como-funciona">Cómo funciona</a>
-            <a href="#demo">Demo</a>
-            <a href="#beneficios">Beneficios</a>
+          <div
+            className="nav-links"
+            id="navLinks"
+          >
+            <a href="#problema">
+              El problema
+            </a>
+
+            <a href="#como-funciona">
+              Cómo funciona
+            </a>
+
+            <a href="#demo">
+              Demo
+            </a>
+
+            <a href="#beneficios">
+              Beneficios
+            </a>
           </div>
 
           <Link
@@ -1850,7 +2342,10 @@ export default function HomePage() {
       </div>
 
       <main>
-        <section className="hero" id="inicio">
+        <section
+          className="hero"
+          id="inicio"
+        >
           <div
             className="hero-dots"
             aria-hidden="true"
@@ -1891,14 +2386,16 @@ export default function HomePage() {
             </div>
 
             <h1>
-              Tus clientes prueban los muebles en su casa
+              Tus clientes prueban los muebles
+              en su casa
               <span>antes de comprar</span>
             </h1>
 
             <p className="hero-copy">
-              Reality permite visualizar cada mueble en el ambiente
-              real, con escala, proporciones y colores precisos.
-              Más confianza, menos dudas y más ventas.
+              Reality permite visualizar cada mueble en
+              el ambiente real, con escala, proporciones
+              y colores precisos. Más confianza, menos
+              dudas y más ventas.
             </p>
 
             <div className="hero-actions">
@@ -1952,7 +2449,10 @@ export default function HomePage() {
           </svg>
         </section>
 
-        <section className="section" id="problema">
+        <section
+          className="section"
+          id="problema"
+        >
           <div className="section-card reveal">
             <div className="section-heading">
               <span className="eyebrow">
@@ -1961,13 +2461,14 @@ export default function HomePage() {
               </span>
 
               <h2>
-                Comprar muebles hoy es incierto. Con Reality, ya no.
+                Comprar muebles hoy es incierto.
+                Con Reality, ya no.
               </h2>
 
               <p>
-                El cliente deja de imaginar cómo quedaría el producto
-                y puede verlo directamente en su espacio antes de
-                decidir.
+                El cliente deja de imaginar cómo quedaría
+                el producto y puede verlo directamente en
+                su espacio antes de decidir.
               </p>
             </div>
 
@@ -2074,57 +2575,74 @@ export default function HomePage() {
                 Configuración simple
               </span>
 
-              <h2>Así de simple funciona</h2>
+              <h2>
+                Así de simple funciona
+              </h2>
 
               <p>
-                Nosotros nos ocupamos de la parte técnica para que tu
-                equipo pueda empezar sin cambiar su forma de trabajar.
+                Nosotros nos ocupamos de la parte técnica
+                para que tu equipo pueda empezar sin
+                cambiar su forma de trabajar.
               </p>
             </div>
 
             <div className="steps">
               <article className="step-card reveal">
-                <div className="step-number">1</div>
+                <div className="step-number">
+                  1
+                </div>
 
                 <div className="step-visual">
                   <i data-lucide="cloud-upload"></i>
                 </div>
 
-                <h3>Enviás tus productos</h3>
+                <h3>
+                  Enviás tus productos
+                </h3>
 
                 <p>
-                  Subís fotos, medidas, colores y variantes desde un
-                  panel simple e intuitivo.
+                  Subís fotos, medidas, colores y variantes
+                  desde un panel simple e intuitivo.
                 </p>
               </article>
 
               <article className="step-card reveal">
-                <div className="step-number">2</div>
+                <div className="step-number">
+                  2
+                </div>
 
                 <div className="step-visual">
                   <i data-lucide="scan-search"></i>
                 </div>
 
-                <h3>Revisamos y publicamos</h3>
+                <h3>
+                  Revisamos y publicamos
+                </h3>
 
                 <p>
-                  Nuestro equipo controla cada producto y lo deja listo
-                  para usarse en realidad aumentada.
+                  Nuestro equipo controla cada producto y
+                  lo deja listo para usarse en realidad
+                  aumentada.
                 </p>
               </article>
 
               <article className="step-card reveal">
-                <div className="step-number">3</div>
+                <div className="step-number">
+                  3
+                </div>
 
                 <div className="step-visual">
                   <i data-lucide="code-xml"></i>
                 </div>
 
-                <h3>Lo instalás en tu sitio</h3>
+                <h3>
+                  Lo instalás en tu sitio
+                </h3>
 
                 <p>
-                  Pegás un código simple y listo. No necesitás migrar
-                  de plataforma ni rehacer tu tienda.
+                  Pegás un código simple y listo. No
+                  necesitás migrar de plataforma ni
+                  rehacer tu tienda.
                 </p>
               </article>
             </div>
@@ -2143,11 +2661,14 @@ export default function HomePage() {
                   Catálogo real
                 </span>
 
-                <h2>Viendo es creyendo</h2>
+                <h2>
+                  Viendo es creyendo
+                </h2>
 
                 <p>
-                  Esto no es una simulación: son los productos reales
-                  cargados en la plataforma. Elegí uno de la lista y
+                  Esto no es una simulación: son los
+                  productos reales cargados en la
+                  plataforma. Elegí uno de la lista y
                   probalo en 3D.
                 </p>
 
@@ -2155,8 +2676,9 @@ export default function HomePage() {
                   <i data-lucide="move"></i>
 
                   <span>
-                    Desde el celular, el botón “Ver en tu espacio” abre
-                    la cámara real y ancla el mueble a escala exacta.
+                    Desde el celular, el botón “Ver en tu
+                    espacio” abre la cámara real y ancla
+                    el mueble a escala exacta.
                   </span>
                 </div>
               </div>
@@ -2189,41 +2711,34 @@ export default function HomePage() {
                           setSelectedIndex(index);
                         }}
                       >
-                        <strong>{product.name}</strong>
-                        <span>{product.price}</span>
+                        <strong>
+                          {product.name}
+                        </strong>
+
+                        <span>
+                          {product.price}
+                        </span>
                       </button>
                     ))}
                   </div>
 
                   {selected && (
-                    <div className="measurements">
-                      <div className="measure">
-                        <span>
-                          <i data-lucide="move-horizontal"></i>
-                          Ancho
-                        </span>
+                    <button
+                      type="button"
+                      className="dims-toggle-btn"
+                      onClick={() => {
+                        setShowingDims(
+                          (currentValue) =>
+                            !currentValue
+                        );
+                      }}
+                    >
+                      <i data-lucide="ruler"></i>
 
-                        <span>{selected.ancho} cm</span>
-                      </div>
-
-                      <div className="measure">
-                        <span>
-                          <i data-lucide="move-horizontal"></i>
-                          Profundidad
-                        </span>
-
-                        <span>{selected.fondo} cm</span>
-                      </div>
-
-                      <div className="measure">
-                        <span>
-                          <i data-lucide="move-vertical"></i>
-                          Alto
-                        </span>
-
-                        <span>{selected.alto} cm</span>
-                      </div>
-                    </div>
+                      {showingDims
+                        ? 'Ocultar medidas'
+                        : 'Ver medidas sobre el mueble'}
+                    </button>
                   )}
 
                   <div className="powered-by">
@@ -2239,32 +2754,85 @@ export default function HomePage() {
                   </span>
 
                   {selected ? (
-                    // eslint-disable-next-line react/no-unknown-property
-                    <model-viewer
-                      key={selected.id}
-                      src={selected.model_url}
-                      camera-controls
-                      auto-rotate
-                      shadow-intensity="1"
-                      exposure="0.95"
-                      environment-image="neutral"
-                      camera-orbit="35deg 78deg 2.6m"
-                      ar
-                      ar-modes="webxr scene-viewer quick-look"
-                      ar-scale="fixed"
-                      ar-placement="floor"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                      }}
-                    >
-                      <button
-                        slot="ar-button"
-                        className="ar-real-btn"
+                    <>
+                      {/* eslint-disable-next-line react/no-unknown-property */}
+                      <model-viewer
+                        key={selected.id}
+                        ref={demoViewerRef}
+                        src={selected.model_url}
+                        camera-controls
+                        auto-rotate
+                        shadow-intensity="1"
+                        exposure="0.95"
+                        environment-image="neutral"
+                        camera-orbit="35deg 78deg 2.6m"
+                        ar
+                        ar-modes="webxr scene-viewer quick-look"
+                        ar-scale="fixed"
+                        ar-placement="floor"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                        }}
                       >
-                        Ver en tu espacio (AR)
-                      </button>
-                    </model-viewer>
+                        <button
+                          slot="ar-button"
+                          className="ar-real-btn"
+                        >
+                          Ver en tu espacio (AR)
+                        </button>
+
+                        {/* eslint-disable-next-line react/no-unknown-property */}
+                        <span
+                          slot="hotspot-alto-top"
+                          data-position="0 0 0"
+                          style={{ display: 'none' }}
+                        ></span>
+
+                        {/* eslint-disable-next-line react/no-unknown-property */}
+                        <span
+                          slot="hotspot-alto-bottom"
+                          data-position="0 0 0"
+                          style={{ display: 'none' }}
+                        ></span>
+
+                        {/* eslint-disable-next-line react/no-unknown-property */}
+                        <span
+                          slot="hotspot-ancho-left"
+                          data-position="0 0 0"
+                          style={{ display: 'none' }}
+                        ></span>
+
+                        {/* eslint-disable-next-line react/no-unknown-property */}
+                        <span
+                          slot="hotspot-ancho-right"
+                          data-position="0 0 0"
+                          style={{ display: 'none' }}
+                        ></span>
+
+                        {/* eslint-disable-next-line react/no-unknown-property */}
+                        <span
+                          slot="hotspot-fondo-near"
+                          data-position="0 0 0"
+                          style={{ display: 'none' }}
+                        ></span>
+
+                        {/* eslint-disable-next-line react/no-unknown-property */}
+                        <span
+                          slot="hotspot-fondo-far"
+                          data-position="0 0 0"
+                          style={{ display: 'none' }}
+                        ></span>
+                      </model-viewer>
+
+                      {showingDims && (
+                        <svg
+                          ref={demoSvgRef}
+                          className="demo-dim-svg"
+                          aria-hidden="true"
+                        ></svg>
+                      )}
+                    </>
                   ) : (
                     <div
                       className="empty-note"
@@ -2291,13 +2859,14 @@ export default function HomePage() {
               </span>
 
               <h2>
-                Pensado para vender más sin complicar tu operación
+                Pensado para vender más sin complicar
+                tu operación
               </h2>
 
               <p>
-                Reality se adapta a tu tienda actual y deja la
-                experiencia técnica resuelta para tu equipo y tus
-                clientes.
+                Reality se adapta a tu tienda actual y
+                deja la experiencia técnica resuelta para
+                tu equipo y tus clientes.
               </p>
             </div>
 
@@ -2307,11 +2876,13 @@ export default function HomePage() {
                   <i data-lucide="scan-3d"></i>
                 </div>
 
-                <h3>Escala real bloqueada</h3>
+                <h3>
+                  Escala real bloqueada
+                </h3>
 
                 <p>
-                  Tus muebles se ven en tamaño real y con proporciones
-                  exactas, sin distorsiones.
+                  Tus muebles se ven en tamaño real y con
+                  proporciones exactas, sin distorsiones.
                 </p>
               </article>
 
@@ -2320,11 +2891,13 @@ export default function HomePage() {
                   <i data-lucide="cloud-upload"></i>
                 </div>
 
-                <h3>Panel simple de carga</h3>
+                <h3>
+                  Panel simple de carga
+                </h3>
 
                 <p>
-                  Subí productos y variantes fácilmente. Nosotros nos
-                  ocupamos de lo técnico.
+                  Subí productos y variantes fácilmente.
+                  Nosotros nos ocupamos de lo técnico.
                 </p>
               </article>
 
@@ -2333,11 +2906,14 @@ export default function HomePage() {
                   <i data-lucide="blocks"></i>
                 </div>
 
-                <h3>Integración sin migrar</h3>
+                <h3>
+                  Integración sin migrar
+                </h3>
 
                 <p>
-                  Funciona con tu tienda actual: Shopify, Tiendanube,
-                  WooCommerce o desarrollo propio.
+                  Funciona con tu tienda actual: Shopify,
+                  Tiendanube, WooCommerce o desarrollo
+                  propio.
                 </p>
               </article>
 
@@ -2346,11 +2922,13 @@ export default function HomePage() {
                   <i data-lucide="globe-2"></i>
                 </div>
 
-                <h3>Funciona sin apps</h3>
+                <h3>
+                  Funciona sin apps
+                </h3>
 
                 <p>
-                  El cliente lo usa desde el navegador de su celular.
-                  No necesita descargar nada.
+                  El cliente lo usa desde el navegador de
+                  su celular. No necesita descargar nada.
                 </p>
               </article>
             </div>
@@ -2364,14 +2942,14 @@ export default function HomePage() {
           <div className="cta-card reveal">
             <div className="cta-copy">
               <h2>
-                Sumate como mueblería piloto y llevá tus ventas al
-                siguiente nivel
+                Sumate como mueblería piloto y llevá tus
+                ventas al siguiente nivel
               </h2>
 
               <p>
-                Estamos seleccionando mueblerías que quieran probar
-                Reality, sumar productos y crecer junto a nosotros
-                desde el comienzo.
+                Estamos seleccionando mueblerías que
+                quieran probar Reality, sumar productos y
+                crecer junto a nosotros desde el comienzo.
               </p>
 
               <div className="pilot-proof">
@@ -2379,13 +2957,22 @@ export default function HomePage() {
                   className="avatars"
                   aria-hidden="true"
                 >
-                  <span className="avatar">MR</span>
-                  <span className="avatar">CN</span>
-                  <span className="avatar">LM</span>
+                  <span className="avatar">
+                    MR
+                  </span>
+
+                  <span className="avatar">
+                    CN
+                  </span>
+
+                  <span className="avatar">
+                    LM
+                  </span>
                 </div>
 
                 <span>
-                  Más mueblerías ya están probando la experiencia.
+                  Más mueblerías ya están probando la
+                  experiencia.
                 </span>
               </div>
             </div>
@@ -2394,7 +2981,9 @@ export default function HomePage() {
               className="pilot-form"
               id="pilotForm"
             >
-              <h3>Quiero conocer Reality</h3>
+              <h3>
+                Quiero conocer Reality
+              </h3>
 
               <div className="field">
                 <label htmlFor="businessName">
@@ -2456,16 +3045,24 @@ export default function HomePage() {
               <i data-lucide="armchair"></i>
             </span>
 
-            <span className="brand">Reality</span>
+            <span className="brand">
+              Reality
+            </span>
           </div>
 
           <span>
-            © 2026 Reality. Realidad aumentada para mueblerías.
+            © 2026 Reality. Realidad aumentada para
+            mueblerías.
           </span>
 
           <div className="footer-mini">
-            <a href="#inicio">Inicio</a>
-            <a href="#demo">Demo</a>
+            <a href="#inicio">
+              Inicio
+            </a>
+
+            <a href="#demo">
+              Demo
+            </a>
           </div>
         </div>
       </footer>
