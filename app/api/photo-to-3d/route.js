@@ -5,8 +5,12 @@
 //
 // Necesita la variable de entorno FAL_KEY (Vercel → Settings → Environment Variables)
 // Se consigue en fal.ai → Dashboard → Settings → API Keys
+//
+// Usa Meshy 6 (a través de fal.ai) — antes usábamos Tripo3D, lo cambiamos
+// porque Meshy dio resultados mejores y más rápidos, sobre todo con
+// muebles de forma irregular (sillones esquineros, en L, etc.)
 
-const MODEL_ID = 'tripo3d/h3.1/multiview-to-3d';
+const MODEL_ID = 'fal-ai/meshy/v6/multi-image-to-3d';
 
 import { checkRateLimit, verifySupabaseUser } from '../../../lib/rateLimit';
 
@@ -38,12 +42,11 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         image_urls: imageUrls,
-        texture: true,
-        pbr: true,
-        texture_quality: 'standard',
-        geometry_quality: 'standard',
-        texture_alignment: 'original_image',
-        orientation: 'default',
+        should_texture: true,
+        should_remesh: true,
+        symmetry_mode: 'auto',
+        topology: 'triangle',
+        target_polycount: 30000,
       }),
     });
 
