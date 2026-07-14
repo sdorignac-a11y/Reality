@@ -251,12 +251,17 @@
   // UI flotante con Shadow DOM
   // -----------------------------------------------------------
 
-  function buildFAB(currentProduct, storeId) {
+  function buildFAB(currentProduct, storeId, inlineContainer) {
     var host = document.createElement('div');
 
     host.style.all = 'initial';
 
-    document.body.appendChild(host);
+    if (inlineContainer) {
+      inlineContainer.innerHTML = '';
+      inlineContainer.appendChild(host);
+    } else {
+      document.body.appendChild(host);
+    }
 
     var root = host.attachShadow
       ? host.attachShadow({ mode: 'open' })
@@ -273,6 +278,68 @@
 
       ':host{',
       '  all:initial;',
+      '}',
+
+      '.inline-bar{',
+      '  width:100%;',
+      '  font-family:"Nunito",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+      '}',
+
+      '.inline-actions{',
+      '  display:grid;',
+      '  grid-template-columns:1fr 1fr;',
+      '  gap:9px;',
+      '}',
+
+      '.inline-actions.single-btn{',
+      '  grid-template-columns:1fr;',
+      '}',
+
+      '.inline-btn{',
+      '  display:flex;',
+      '  align-items:center;',
+      '  justify-content:center;',
+      '  gap:7px;',
+      '  min-height:48px;',
+      '  border-radius:999px;',
+      '  font-size:12.5px;',
+      '  font-weight:800;',
+      '  cursor:pointer;',
+      '}',
+
+      '.inline-btn .line-icon{',
+      '  width:16px;',
+      '  height:16px;',
+      '}',
+
+      '.inline-btn-primary{',
+      '  border:none;',
+      '  color:#3B2410;',
+      '  background:linear-gradient(180deg,#E4B573,#C98C42);',
+      '  box-shadow:0 10px 22px rgba(168,99,44,.24);',
+      '}',
+
+      '.inline-btn-primary:hover{',
+      '  box-shadow:0 13px 26px rgba(168,99,44,.3);',
+      '}',
+
+      '.inline-btn-secondary{',
+      '  background:#FFFFFF;',
+      '  color:#6B4A32;',
+      '  border:1.5px solid #E7CDA3;',
+      '}',
+
+      '.inline-btn-secondary:hover{',
+      '  background:#FBF0E1;',
+      '}',
+
+      '.inline-poweredby{',
+      '  margin-top:8px;',
+      '  text-align:center;',
+      '  color:#B5A488;',
+      '  font-size:10px;',
+      '  font-weight:800;',
+      '  font-style:italic;',
       '}',
 
       '.fab-wrap{',
@@ -1116,6 +1183,54 @@
 
     root.appendChild(style);
 
+    var arOverlay = buildAROverlay(root);
+    var resultOverlay = buildResultOverlay(root);
+    var catalogOverlay = buildCatalogOverlay(
+      root,
+      arOverlay,
+      resultOverlay
+    );
+
+    catalogOverlay._storeId = storeId;
+
+    if (inlineContainer) {
+      // ---------------------------------------------------------
+      // Modo inline: barra de botones fija, en el lugar donde la
+      // mueblería puso el <div> — sin nada flotando por encima del
+      // resto del sitio (útil si ya tienen otro botón flotante,
+      // como el de WhatsApp).
+      // ---------------------------------------------------------
+      var bar = document.createElement('div');
+      bar.className = 'inline-bar';
+
+      bar.innerHTML =
+        '<div class="inline-actions' + (currentProduct ? '' : ' single-btn') + '">' +
+        (currentProduct
+          ? '<button class="inline-btn inline-btn-primary" id="inline3d">' + cubeIcon() + ' Ver en 3D</button>'
+          : '') +
+        '<button class="inline-btn inline-btn-secondary" id="inlineCatalog">' + cameraIcon() + ' Probar en mi espacio</button>' +
+        '</div>' +
+        '<div class="inline-poweredby">✦ powered by reality ✦</div>';
+
+      root.appendChild(bar);
+
+      if (currentProduct) {
+        bar.querySelector('#inline3d').addEventListener('click', function () {
+          openAR(arOverlay, currentProduct);
+        });
+      }
+
+      bar.querySelector('#inlineCatalog').addEventListener('click', function () {
+        openCatalog(catalogOverlay);
+      });
+
+      return;
+    }
+
+    // ---------------------------------------------------------
+    // Modo flotante (por defecto): la manchita en la esquina,
+    // con el menú desplegable.
+    // ---------------------------------------------------------
     var fab = document.createElement('button');
 
     fab.className = 'fab-wrap';
@@ -1217,16 +1332,6 @@
         fab.classList.remove('is-open');
       }
     });
-
-    var arOverlay = buildAROverlay(root);
-    var resultOverlay = buildResultOverlay(root);
-    var catalogOverlay = buildCatalogOverlay(
-      root,
-      arOverlay,
-      resultOverlay
-    );
-
-    catalogOverlay._storeId = storeId;
 
     if (
       currentProduct &&
@@ -2170,6 +2275,8 @@
       return;
     }
 
+    var inline = container.hasAttribute('data-ebano-inline');
+
     if (manual) {
       var idOrSlug =
         manual.getAttribute(
@@ -2187,10 +2294,10 @@
           );
         })
         .then(function (product) {
-          buildFAB(product, storeId);
+          buildFAB(product, storeId, inline ? container : null);
         })
         .catch(function () {
-          buildFAB(null, storeId);
+          buildFAB(null, storeId, inline ? container : null);
         });
 
       return;
@@ -2200,7 +2307,7 @@
       var slug = slugFromUrl();
 
       if (!slug) {
-        buildFAB(null, storeId);
+        buildFAB(null, storeId, inline ? container : null);
 
         return;
       }
@@ -2210,10 +2317,10 @@
         storeId
       )
         .then(function (product) {
-          buildFAB(product, storeId);
+          buildFAB(product, storeId, inline ? container : null);
         })
         .catch(function () {
-          buildFAB(null, storeId);
+          buildFAB(null, storeId, inline ? container : null);
         });
     }
   }
