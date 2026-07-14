@@ -472,10 +472,6 @@ export default function HomePage() {
         .product-list-item.active { border-color: var(--blue-600); background: var(--blue-50); }
         .product-list-item:hover { border-color: var(--blue-500); }
         .empty-note { font-size: 0.8rem; color: var(--muted); text-align: center; padding: 10px 4px; }
-        .measurements { display: grid; gap: 8px; margin-bottom: 16px; margin-top: auto; }
-        .measure { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #5d6f8c; font-size: 0.76rem; font-weight: 800; }
-        .measure span:first-child { display: flex; align-items: center; gap: 5px; }
-        .measure i { width: 14px; height: 14px; color: var(--blue-700); }
         .powered-by { display: flex; align-items: center; justify-content: center; gap: 5px; color: #8a99b0; font-size: 0.66rem; font-weight: 800; }
         .powered-by strong { color: var(--blue-700); }
         .ar-stage { position: relative; overflow: hidden; min-height: 400px; background: #fafcff; }
@@ -803,14 +799,6 @@ export default function HomePage() {
                       </button>
                     ))}
                   </div>
-
-                  {selected && (
-                    <div className="measurements">
-                      <div className="measure"><span><i data-lucide="move-horizontal"></i> Ancho</span><span>{selected.ancho} cm</span></div>
-                      <div className="measure"><span><i data-lucide="move-horizontal"></i> Profundidad</span><span>{selected.fondo} cm</span></div>
-                      <div className="measure"><span><i data-lucide="move-vertical"></i> Alto</span><span>{selected.alto} cm</span></div>
-                    </div>
-                  )}
 
                   {selected && Array.isArray(selected.extra_measurements) && selected.extra_measurements.length > 0 && (
                     <div className="extra-measurements-badges">
