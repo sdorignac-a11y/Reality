@@ -21,7 +21,10 @@ export async function POST(req) {
       return cors(json({ error: 'Necesitás estar logueado para generar modelos 3D.' }, 401));
     }
 
-    const { blocked } = await checkRateLimit('photo3d:' + user.id, 10, 60);
+    // Antes 10/hora — lo subimos a 40 para poder cargar catálogos grandes
+    // de clientes nuevos en una sola sentada (sigue habiendo un techo,
+    // para frenar un abuso real, pero ya no es el cuello de botella).
+    const { blocked } = await checkRateLimit('photo3d:' + user.id, 40, 60);
     if (blocked) {
       return cors(
         json({ error: 'Alcanzaste el límite de generaciones por hora. Probá más tarde.' }, 429)
