@@ -49,7 +49,8 @@ export async function GET(req) {
     }
 
     const resultData = await resultRes.json();
-    const modelUrl = resultData?.model_mesh?.url;
+    // Meshy devuelve el archivo en "model_glb" (Tripo3D lo llamaba "model_mesh")
+    const modelUrl = resultData?.model_glb?.url || resultData?.model_urls?.glb;
 
     if (!modelUrl) {
       return cors(json({ status: 'COMPLETED', error: 'No se encontró el archivo del modelo generado' }, 200));
