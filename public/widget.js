@@ -50,37 +50,6 @@
     return modelViewerLoading;
   }
 
-    var LUCIDE_SRC =
-    'https://unpkg.com/lucide@latest/dist/umd/lucide.js';
-
-  var lucideLoading = null;
-
-  function ensureLucide() {
-    if (window.lucide) {
-      return Promise.resolve(window.lucide);
-    }
-
-    if (lucideLoading) {
-      return lucideLoading;
-    }
-
-    lucideLoading = new Promise(function (resolve, reject) {
-      var script = document.createElement('script');
-
-      script.src = LUCIDE_SRC;
-
-      script.onload = function () {
-        resolve(window.lucide);
-      };
-
-      script.onerror = reject;
-
-      document.head.appendChild(script);
-    });
-
-    return lucideLoading;
-  }
-
   // Corrige la escala del modelo 3D para que coincida con las medidas
   // reales cargadas en el producto (alto/ancho/fondo en cm) — sin esto,
   // el tamaño en AR depende únicamente de cómo haya salido escalado el
@@ -391,21 +360,13 @@
       '  outline:none;',
       '  transition:transform .22s ease,box-shadow .22s ease,background .22s ease;',
       '}',
-
-      '.fab-wrap svg{',
-      '  width:39px;',
-      '  height:39px;',
+      
+      '.fab-wrap img{',
+      '  width:43px;',
+      '  height:43px;',
       '  display:block;',
-      '  fill:none !important;',
-      '  stroke:#8A552F;',
-      '  stroke-width:2.8;',
-      '  stroke-linecap:round;',
-      '  stroke-linejoin:round;',
+      '  object-fit:contain;',
       '  transition:transform .22s ease;',
-      '}',
-
-      '.fab-wrap svg *{',
-      '  fill:none !important;',
       '}',
 
       '.fab-wrap:hover{',
@@ -414,12 +375,12 @@
       '  box-shadow:0 18px 36px rgba(120,70,28,.28);',
       '}',
 
-      '.fab-wrap:hover svg{',
-      '  transform:scale(1.05) rotate(-4deg);',
+           '.fab-wrap:hover img{',
+      '  transform:scale(1.05);',
       '}',
 
-      '.fab-wrap.is-open svg{',
-      '  transform:scale(.94) rotate(6deg);',
+      '.fab-wrap.is-open img{',
+      '  transform:scale(.94);',
       '}',
 
       '.menu{',
@@ -1291,22 +1252,12 @@
     );
 
     fab.innerHTML =
-      '<i data-lucide="rotate-3d" aria-hidden="true"></i>';
+      '<img ' +
+      'src="' + SITE_DOMAIN + '/reality-icono-3d-rotacion.png" ' +
+      'alt="" ' +
+      'aria-hidden="true">' ;
 
     root.appendChild(fab);
-
-    ensureLucide()
-      .then(function (lucide) {
-        lucide.createIcons({
-          root: root
-        });
-      })
-      .catch(function (error) {
-        console.error(
-          '[Reality widget] No se pudo cargar el ícono de Lucide:',
-          error
-        );
-      });
 
     var menu = document.createElement('div');
 
