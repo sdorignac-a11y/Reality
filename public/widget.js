@@ -387,8 +387,13 @@
 '  position:fixed;',
 '  right:22px;',
 '  bottom:100px;',
+'  z-index:999999;',
+'  font-family:"Nunito",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+'}',
 
-      '.menu.hidden{',
+'.menu.hidden{',
+'  display:none;',
+'}',
       '  display:none;',
       '}',
 
