@@ -50,6 +50,37 @@
     return modelViewerLoading;
   }
 
+    var LUCIDE_SRC =
+    'https://unpkg.com/lucide@latest/dist/umd/lucide.js';
+
+  var lucideLoading = null;
+
+  function ensureLucide() {
+    if (window.lucide) {
+      return Promise.resolve(window.lucide);
+    }
+
+    if (lucideLoading) {
+      return lucideLoading;
+    }
+
+    lucideLoading = new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+
+      script.src = LUCIDE_SRC;
+
+      script.onload = function () {
+        resolve(window.lucide);
+      };
+
+      script.onerror = reject;
+
+      document.head.appendChild(script);
+    });
+
+    return lucideLoading;
+  }
+
   // Corrige la escala del modelo 3D para que coincida con las medidas
   // reales cargadas en el producto (alto/ancho/fondo en cm) — sin esto,
   // el tamaño en AR depende únicamente de cómo haya salido escalado el
@@ -1252,24 +1283,30 @@
     // ---------------------------------------------------------
     var fab = document.createElement('button');
 
+    fab.type = 'button';
     fab.className = 'fab-wrap';
-fab.setAttribute('aria-label', 'Abrir visualizador 3D y AR');
+    fab.setAttribute(
+      'aria-label',
+      'Abrir visualizador 3D y realidad aumentada'
+    );
 
     fab.innerHTML =
-      '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-      '  <g style="fill:none !important;stroke:#8A552F !important;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round;">' +
-
-      '    <path style="fill:none !important;" d="M32 12 45 19.5 32 27 19 19.5 32 12Z" />' +
-      '    <path style="fill:none !important;" d="M19 19.5v15L32 42l13-7.5v-15" />' +
-      '    <path style="fill:none !important;" d="M32 27v15" />' +
-
-      '    <path style="fill:none !important;" d="M13 27c-4 2.8-6 6.2-6 9.5C7 45 18.2 52 32 52c7.2 0 13.6-1.9 18-5.1" />' +
-      '    <path style="fill:none !important;" d="m44.5 44.5 6 2-2 6" />' +
-
-      '  </g>' +
-      '</svg>';
+      '<i data-lucide="rotate-3d" aria-hidden="true"></i>';
 
     root.appendChild(fab);
+
+    ensureLucide()
+      .then(function (lucide) {
+        lucide.createIcons({
+          root: root
+        });
+      })
+      .catch(function (error) {
+        console.error(
+          '[Reality widget] No se pudo cargar el ícono de Lucide:',
+          error
+        );
+      });
 
     var menu = document.createElement('div');
 
