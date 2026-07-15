@@ -2,8 +2,8 @@
  * Reality — Widget embebible
  * Estética: panel rectangular, botones compactos, íconos monocromos,
  * tipografía redondeada (Baloo 2 / Nunito), footer "powered by reality".
- * + Análisis con IA: el cliente sube una foto de su espacio y Claude
- *   sugiere qué productos del catálogo quedarían mejor ahí.
+ * + Generación con IA: el cliente sube una foto de su espacio,
+ *   escribe una indicación opcional y prueba el producto actual.
  */
 (function () {
   'use strict';
@@ -50,23 +50,25 @@
     return modelViewerLoading;
   }
 
-  // Corrige la escala del modelo 3D para que coincida con las medidas
-  // reales cargadas en el producto (alto/ancho/fondo en cm) — sin esto,
-  // el tamaño en AR depende únicamente de cómo haya salido escalado el
-  // archivo .glb, que puede no tener nada que ver con las medidas reales.
   function applyRealScale(modelViewer, alto, ancho, fondo) {
-    // Si este visor ya tenía un escuchador de una vez anterior, lo sacamos
-    // primero — si no, se van acumulando uno por cada producto que se vio,
-    // y todos terminan disparando juntos y pisándose entre sí.
     if (modelViewer.__realityDoScale) {
-      modelViewer.removeEventListener('load', modelViewer.__realityDoScale);
+      modelViewer.removeEventListener(
+        'load',
+        modelViewer.__realityDoScale
+      );
+
       modelViewer.__realityDoScale = null;
     }
 
     function doScale() {
       try {
         var dims = modelViewer.getDimensions();
-        var current = modelViewer.scale || { x: 1, y: 1, z: 1 };
+        var current =
+          modelViewer.scale || {
+            x: 1,
+            y: 1,
+            z: 1
+          };
 
         var baseX = dims.x / (current.x || 1);
         var baseY = dims.y / (current.y || 1);
@@ -76,45 +78,84 @@
         var targetY = (Number(alto) || 0) / 100;
         var targetZ = (Number(fondo) || 0) / 100;
 
-        // Un factor por eje (no un promedio) — así las tres medidas
-        // quedan exactas, aunque eso implique estirar un poco la forma
-        // si el modelo 3D no tenía las mismas proporciones reales.
-        var scaleX = baseX > 0 && targetX > 0 ? targetX / baseX : 1;
-        var scaleY = baseY > 0 && targetY > 0 ? targetY / baseY : 1;
-        var scaleZ = baseZ > 0 && targetZ > 0 ? targetZ / baseZ : 1;
+        var scaleX =
+          baseX > 0 && targetX > 0
+            ? targetX / baseX
+            : 1;
 
-        if (![scaleX, scaleY, scaleZ].every(function (n) { return isFinite(n) && n > 0; })) {
+        var scaleY =
+          baseY > 0 && targetY > 0
+            ? targetY / baseY
+            : 1;
+
+        var scaleZ =
+          baseZ > 0 && targetZ > 0
+            ? targetZ / baseZ
+            : 1;
+
+        var valid = [
+          scaleX,
+          scaleY,
+          scaleZ
+        ].every(function (number) {
+          return (
+            isFinite(number) &&
+            number > 0
+          );
+        });
+
+        if (!valid) {
           return;
         }
 
-        modelViewer.setAttribute('scale', scaleX + ' ' + scaleY + ' ' + scaleZ);
-      } catch (e) {
-        // si algo falla, dejamos el modelo con su escala original
+        modelViewer.setAttribute(
+          'scale',
+          scaleX +
+            ' ' +
+            scaleY +
+            ' ' +
+            scaleZ
+        );
+      } catch (error) {
+        // Se conserva la escala original.
       }
     }
 
     modelViewer.__realityDoScale = doScale;
 
-    modelViewer.addEventListener('load', doScale);
-    if (modelViewer.loaded) doScale();
+    modelViewer.addEventListener(
+      'load',
+      doScale
+    );
+
+    if (modelViewer.loaded) {
+      doScale();
+    }
   }
 
   function fetchFromSupabase(url) {
     return fetch(url, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
-        Authorization: 'Bearer ' + SUPABASE_ANON_KEY
+        Authorization:
+          'Bearer ' +
+          SUPABASE_ANON_KEY
       }
-    }).then(function (res) {
-      if (!res.ok) {
-        throw new Error('No se pudo consultar Supabase');
+    }).then(function (response) {
+      if (!response.ok) {
+        throw new Error(
+          'No se pudo consultar Supabase'
+        );
       }
 
-      return res.json();
+      return response.json();
     });
   }
 
-  function fetchProductById(id, storeId) {
+  function fetchProductById(
+    id,
+    storeId
+  ) {
     var url =
       SUPABASE_URL +
       '/rest/v1/products?id=eq.' +
@@ -124,16 +165,23 @@
       '&status=eq.published' +
       '&select=id,name,price,alto,ancho,fondo,model_url,slug,extra_measurements';
 
-    return fetchFromSupabase(url).then(function (rows) {
-      if (!rows.length) {
-        throw new Error('Producto no encontrado');
-      }
+    return fetchFromSupabase(url).then(
+      function (rows) {
+        if (!rows.length) {
+          throw new Error(
+            'Producto no encontrado'
+          );
+        }
 
-      return rows[0];
-    });
+        return rows[0];
+      }
+    );
   }
 
-  function fetchProductBySlug(slug, storeId) {
+  function fetchProductBySlug(
+    slug,
+    storeId
+  ) {
     var url =
       SUPABASE_URL +
       '/rest/v1/products?slug=eq.' +
@@ -143,43 +191,41 @@
       '&status=eq.published' +
       '&select=id,name,price,alto,ancho,fondo,model_url,slug,extra_measurements';
 
-    return fetchFromSupabase(url).then(function (rows) {
-      return rows.length ? rows[0] : null;
-    });
-  }
-
-  function fetchCatalog(storeId) {
-    var url =
-      SUPABASE_URL +
-      '/rest/v1/products?status=eq.published' +
-      '&owner_id=eq.' +
-      encodeURIComponent(storeId) +
-      '&select=id,name,price,alto,ancho,fondo,model_url,slug,extra_measurements' +
-      '&order=created_at.desc';
-
-    return fetchFromSupabase(url);
+    return fetchFromSupabase(url).then(
+      function (rows) {
+        return rows.length
+          ? rows[0]
+          : null;
+      }
+    );
   }
 
   function slugFromUrl() {
-    var parts = window.location.pathname
-      .split('/')
-      .filter(Boolean);
+    var parts =
+      window.location.pathname
+        .split('/')
+        .filter(Boolean);
 
     return parts.length
-      ? decodeURIComponent(parts[parts.length - 1])
+      ? decodeURIComponent(
+          parts[parts.length - 1]
+        )
       : null;
   }
 
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, function (character) {
-      return {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-      }[character];
-    });
+  function escapeHtml(value) {
+    return String(value).replace(
+      /[&<>"']/g,
+      function (character) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        }[character];
+      }
+    );
   }
 
   function cubeIcon() {
@@ -247,12 +293,13 @@
     );
   }
 
-  // -----------------------------------------------------------
-  // UI flotante con Shadow DOM
-  // -----------------------------------------------------------
-
-  function buildFAB(currentProduct, storeId, inlineContainer) {
-    var host = document.createElement('div');
+  function buildFAB(
+    currentProduct,
+    storeId,
+    inlineContainer
+  ) {
+    var host =
+      document.createElement('div');
 
     host.style.all = 'initial';
 
@@ -264,10 +311,13 @@
     }
 
     var root = host.attachShadow
-      ? host.attachShadow({ mode: 'open' })
+      ? host.attachShadow({
+          mode: 'open'
+        })
       : host;
 
-    var style = document.createElement('style');
+    var style =
+      document.createElement('style');
 
     style.textContent = [
       '@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito:wght@400;600;700;800;900&display=swap");',
@@ -278,6 +328,16 @@
 
       ':host{',
       '  all:initial;',
+      '}',
+
+      '.line-icon{',
+      '  width:23px;',
+      '  height:23px;',
+      '  fill:none;',
+      '  stroke:currentColor;',
+      '  stroke-width:2.5;',
+      '  stroke-linecap:round;',
+      '  stroke-linejoin:round;',
       '}',
 
       '.inline-bar{',
@@ -302,6 +362,7 @@
       '  gap:7px;',
       '  min-height:48px;',
       '  border-radius:999px;',
+      '  font-family:inherit;',
       '  font-size:12.5px;',
       '  font-weight:800;',
       '  cursor:pointer;',
@@ -342,32 +403,32 @@
       '  font-style:italic;',
       '}',
 
-'.fab-wrap{',
-'  position:fixed;',
-'  right:22px;',
-'  bottom:22px;',
-'  width:68px;',
-'  height:68px;',
-'  z-index:999999;',
-'  display:grid;',
-'  place-items:center;',
-'  cursor:pointer;',
-'  border:1.5px solid rgba(218,176,128,.95);',
-'  border-radius:50%;',
-'  background:linear-gradient(180deg,#FFFDF9 0%,#FFF4E7 100%);',
-'  box-shadow:0 14px 32px rgba(120,70,28,.22);',
-'  padding:0;',
-'  outline:none;',
-'  transition:transform .22s ease,box-shadow .22s ease,background .22s ease;',
-'}',
-      
-'.fab-wrap img{',
-'  width:50px;',
-'  height:50px;',
-'  display:block;',
-'  object-fit:contain;',
-'  transition:transform .22s ease;',
-'}',
+      '.fab-wrap{',
+      '  position:fixed;',
+      '  right:22px;',
+      '  bottom:22px;',
+      '  width:68px;',
+      '  height:68px;',
+      '  z-index:999999;',
+      '  display:grid;',
+      '  place-items:center;',
+      '  cursor:pointer;',
+      '  border:1.5px solid rgba(218,176,128,.95);',
+      '  border-radius:50%;',
+      '  background:linear-gradient(180deg,#FFFDF9 0%,#FFF4E7 100%);',
+      '  box-shadow:0 14px 32px rgba(120,70,28,.22);',
+      '  padding:0;',
+      '  outline:none;',
+      '  transition:transform .22s ease,box-shadow .22s ease,background .22s ease;',
+      '}',
+
+      '.fab-wrap img{',
+      '  width:50px;',
+      '  height:50px;',
+      '  display:block;',
+      '  object-fit:contain;',
+      '  transition:transform .22s ease;',
+      '}',
 
       '.fab-wrap:hover{',
       '  transform:translateY(-2px);',
@@ -375,7 +436,7 @@
       '  box-shadow:0 18px 36px rgba(120,70,28,.28);',
       '}',
 
-           '.fab-wrap:hover img{',
+      '.fab-wrap:hover img{',
       '  transform:scale(1.05);',
       '}',
 
@@ -383,17 +444,18 @@
       '  transform:scale(.94);',
       '}',
 
-'.menu{',
-'  position:fixed;',
-'  right:22px;',
-'  bottom:100px;',
-'  z-index:999999;',
-'  font-family:"Nunito",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
-'}',
+      '.menu{',
+      '  position:fixed;',
+      '  right:22px;',
+      '  bottom:100px;',
+      '  z-index:999999;',
+      '  font-family:"Nunito",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+      '}',
 
-'.menu.hidden{',
-'  display:none;',
-'}',
+      '.menu.hidden{',
+      '  display:none;',
+      '}',
+
       '.menu-card{',
       '  position:relative;',
       '  width:286px;',
@@ -537,16 +599,6 @@
       '  border-radius:13px;',
       '  color:#65452E;',
       '  background:linear-gradient(180deg,#F8EBDD 0%,#F3E4D2 100%);',
-      '}',
-
-      '.line-icon{',
-      '  width:23px;',
-      '  height:23px;',
-      '  fill:none;',
-      '  stroke:currentColor;',
-      '  stroke-width:2.5;',
-      '  stroke-linecap:round;',
-      '  stroke-linejoin:round;',
       '}',
 
       '.menu-item .ic-label{',
@@ -870,193 +922,212 @@
       '  font-style:italic;',
       '}',
 
+      '.space-modal{',
+      '  width:620px;',
+      '  max-width:100%;',
+      '  max-height:92vh;',
+      '  padding:38px 40px 30px;',
+      '  border-radius:28px;',
+      '  background:linear-gradient(180deg,#FFFCF7 0%,#FFF9F0 100%);',
+      '  border:1px solid rgba(220,190,150,.72);',
+      '  box-shadow:0 34px 90px rgba(0,0,0,.32);',
+      '}',
+
+      '.space-modal .modal-top{',
+      '  align-items:center;',
+      '  margin-bottom:34px;',
+      '}',
+
+      '.space-modal .modal-top strong{',
+      '  font-family:"Fraunces","Nunito",serif;',
+      '  font-size:23px;',
+      '  line-height:1.2;',
+      '  font-weight:600;',
+      '  letter-spacing:-.02em;',
+      '  color:#251B14;',
+      '}',
+
+      '.space-modal .close{',
+      '  width:40px;',
+      '  height:40px;',
+      '  border-color:#E8D3B7;',
+      '  color:#7A4528;',
+      '  font-size:20px;',
+      '  transition:background .18s ease,transform .18s ease;',
+      '}',
+
+      '.space-modal .close:hover{',
+      '  background:#F9EDDE;',
+      '  transform:rotate(4deg);',
+      '}',
+
       '.upload-zone{',
-      '  border:1.5px dashed #DCC8A9;',
-      '  border-radius:14px;',
-      '  padding:20px;',
+      '  position:relative;',
+      '  width:100%;',
+      '  min-height:210px;',
+      '  display:flex;',
+      '  align-items:center;',
+      '  justify-content:center;',
+      '  border:1.5px dashed #D9B98D;',
+      '  border-radius:18px;',
+      '  padding:24px;',
       '  text-align:center;',
       '  cursor:pointer;',
       '  background:#FFFFFF;',
-      '  margin-bottom:10px;',
-      '  color:#6E4127;',
+      '  margin-bottom:52px;',
+      '  color:#7A4528;',
+      '  overflow:hidden;',
+      '  transition:border-color .18s ease,background .18s ease;',
       '}',
 
-      '.upload-zone img{',
-      '  max-width:100%;',
-      '  max-height:140px;',
-      '  border-radius:10px;',
+      '.upload-zone:hover{',
+      '  border-color:#A96A3A;',
+      '  background:#FFFCF8;',
+      '}',
+
+      '.upload-zone .line-icon{',
+      '  width:28px;',
+      '  height:28px;',
+      '  color:#7A4528;',
       '}',
 
       '.upload-zone p{',
-      '  font-size:11.5px;',
-      '  color:#8A7B68;',
-      '  margin:7px 0 0;',
-      '  line-height:1.45;',
+      '  max-width:360px;',
+      '  font-size:15px;',
+      '  color:#8A7768;',
+      '  margin:16px auto 0;',
+      '  line-height:1.5;',
+      '  font-weight:600;',
+      '}',
+
+      '.upload-zone img{',
+      '  position:absolute;',
+      '  inset:0;',
+      '  width:100%;',
+      '  height:100%;',
+      '  object-fit:cover;',
+      '  display:block;',
+      '}',
+
+      '.upload-change{',
+      '  position:absolute;',
+      '  right:14px;',
+      '  bottom:14px;',
+      '  z-index:2;',
+      '  display:none;',
+      '  padding:8px 13px;',
+      '  border-radius:999px;',
+      '  background:rgba(255,255,255,.94);',
+      '  border:1px solid rgba(218,185,141,.9);',
+      '  color:#6B3E25;',
+      '  font-size:11px;',
+      '  font-weight:800;',
+      '  box-shadow:0 8px 20px rgba(70,40,20,.16);',
+      '}',
+
+      '.upload-zone.has-image .upload-change{',
+      '  display:block;',
       '}',
 
       '.user-note{',
       '  width:100%;',
-      '  min-height:46px;',
-      '  max-height:90px;',
-      '  margin-top:8px;',
-      '  padding:8px 10px;',
-      '  border:1px solid #E0CDB0;',
-      '  border-radius:10px;',
+      '  min-height:138px;',
+      '  max-height:230px;',
+      '  padding:20px 18px;',
+      '  border:1px solid #DFC5A2;',
+      '  border-radius:17px;',
       '  background:#FFFFFF;',
-      '  color:#3A2F22;',
+      '  color:#3A2A20;',
       '  font-family:inherit;',
-      '  font-size:11.5px;',
-      '  line-height:1.4;',
+      '  font-size:15px;',
+      '  line-height:1.55;',
       '  resize:vertical;',
+      '  transition:border-color .18s ease,box-shadow .18s ease;',
       '}',
 
       '.user-note:focus{',
       '  outline:none;',
-      '  border-color:#A8632C;',
+      '  border-color:#A86538;',
+      '  box-shadow:0 0 0 3px rgba(168,101,56,.10);',
       '}',
 
       '.user-note::placeholder{',
-      '  color:#A89680;',
+      '  color:#957C68;',
       '}',
 
-      '.analyze-btn{',
+      '.generate-space-btn{',
       '  width:100%;',
-      '  background:#6B4A32;',
-      '  color:#FFF7ED;',
-      '  border:none;',
-      '  padding:10px;',
-      '  border-radius:999px;',
-      '  font-size:11.5px;',
-      '  font-weight:800;',
-      '  cursor:pointer;',
-      '  margin-bottom:10px;',
-      '  display:none;',
+      '  min-height:66px;',
+      '  margin-top:28px;',
+      '  display:flex;',
       '  align-items:center;',
       '  justify-content:center;',
-      '  gap:6px;',
+      '  gap:9px;',
+      '  border:none;',
+      '  border-radius:18px;',
+      '  padding:14px 20px;',
+      '  background:linear-gradient(180deg,#85502E 0%,#6F3F23 100%);',
+      '  color:#FFF9F1;',
+      '  box-shadow:0 14px 28px rgba(103,58,31,.22);',
+      '  font-family:inherit;',
+      '  font-size:17px;',
+      '  font-weight:900;',
+      '  letter-spacing:.01em;',
+      '  cursor:pointer;',
+      '  transition:transform .18s ease,box-shadow .18s ease,opacity .18s ease;',
       '}',
 
-      '.analyze-btn.show{',
-      '  display:flex;',
+      '.generate-space-btn:hover:not(:disabled){',
+      '  transform:translateY(-1px);',
+      '  box-shadow:0 18px 34px rgba(103,58,31,.28);',
       '}',
 
-      '.analyze-btn:disabled{',
-      '  opacity:.6;',
-      '  cursor:default;',
+      '.generate-space-btn:disabled{',
+      '  opacity:.52;',
+      '  cursor:not-allowed;',
+      '  box-shadow:none;',
       '}',
 
-      '.analyze-btn .line-icon{',
-      '  width:14px;',
-      '  height:14px;',
-      '  color:#FFF7ED;',
+      '.generate-space-btn .line-icon{',
+      '  width:17px;',
+      '  height:17px;',
       '}',
 
-      '.rec-banner{',
-      '  font-size:11px;',
-      '  font-weight:700;',
-      '  color:#5C6B4F;',
-      '  background:#E9EFE3;',
-      '  padding:8px 10px;',
-      '  border-radius:10px;',
-      '  margin-bottom:10px;',
+      '.space-status{',
       '  display:none;',
-      '  line-height:1.4;',
-      '}',
-
-      '.rec-banner.show{',
-      '  display:block;',
-      '}',
-
-      '.cat-note{',
-      '  font-size:11px;',
-      '  color:#7E6B54;',
-      '  background:#F3E8D7;',
-      '  padding:9px 10px;',
-      '  border-radius:10px;',
-      '  margin-bottom:12px;',
-      '  line-height:1.5;',
-      '}',
-
-      '.cat-list{',
-      '  display:flex;',
-      '  flex-direction:column;',
-      '  gap:8px;',
-      '}',
-
-      '.cat-item{',
-      '  display:flex;',
-      '  flex-direction:column;',
-      '  gap:8px;',
-      '  border:1px solid #E0CDB0;',
-      '  border-radius:12px;',
+      '  margin-top:14px;',
       '  padding:10px 12px;',
-      '  background:#FFFFFF;',
+      '  border-radius:11px;',
+      '  background:#F8EBDD;',
+      '  color:#7A4528;',
+      '  font-size:12px;',
+      '  line-height:1.4;',
+      '  font-weight:700;',
+      '  text-align:center;',
       '}',
 
-      '.cat-item.recommended{',
-      '  border-color:#A8632C;',
-      '  background:#FBF0E1;',
-      '  box-shadow:0 6px 14px rgba(168,99,44,.12);',
-      '}',
-
-      '.cat-item .info strong{',
-      '  font-size:12.5px;',
+      '.space-status.show{',
       '  display:block;',
-      '  color:#2D2016;',
       '}',
 
-      '.cat-item .info span{',
-      '  font-size:10.5px;',
-      '  color:#8A7B68;',
-      '}',
-
-      '.cat-item .reason{',
-      '  font-size:10.5px;',
-      '  color:#A8632C;',
-      '  margin-top:4px;',
-      '  font-style:italic;',
-      '  line-height:1.35;',
-      '}',
-
-      '.cat-actions{',
-      '  display:flex;',
-      '  gap:6px;',
-      '}',
-
-      '.cat-actions button{',
-      '  flex:1;',
+      '.space-privacy{',
       '  display:flex;',
       '  align-items:center;',
       '  justify-content:center;',
-      '  gap:5px;',
-      '  border:none;',
-      '  padding:7px 8px;',
-      '  border-radius:999px;',
-      '  font-size:10.5px;',
-      '  font-weight:800;',
-      '  cursor:pointer;',
-      '  white-space:nowrap;',
+      '  gap:8px;',
+      '  margin-top:28px;',
+      '  color:#8F7B69;',
+      '  font-size:13px;',
+      '  line-height:1.4;',
+      '  font-weight:600;',
+      '  text-align:center;',
       '}',
 
-      '.cat-actions button:disabled{',
-      '  opacity:.6;',
-      '  cursor:default;',
-      '}',
-
-      '.cat-btn-3d{',
-      '  background:#6B4A32;',
-      '  color:#FFF7ED;',
-      '}',
-
-      '.cat-btn-gen{',
-      '  background:#FFFFFF;',
-      '  color:#6B4A32;',
-      '  border:1.5px solid #DCC8A9 !important;',
-      '}',
-
-      '.cat-btn-gen .line-icon{',
-      '  width:11.5px;',
-      '  height:11.5px;',
+      '.space-privacy .line-icon{',
+      '  width:16px;',
+      '  height:16px;',
+      '  flex:0 0 auto;',
+      '  color:#724328;',
       '}',
 
       '.result-frame{',
@@ -1107,18 +1178,20 @@
       '  }',
       '}',
 
-      '.empty{',
-      '  font-size:11.5px;',
+      '.hint{',
       '  color:#8A7B68;',
+      '  font-size:11.5px;',
+      '  line-height:1.5;',
       '  text-align:center;',
-      '  padding:16px 0;',
       '}',
 
       '@media (max-width:520px){',
+
       '  .menu{',
-'    right:12px;',
-'    bottom:86px;',
-'  }',
+      '    right:12px;',
+      '    bottom:86px;',
+      '  }',
+
       '  .menu-card{',
       '    width:calc(100vw - 16px);',
       '    max-width:286px;',
@@ -1126,125 +1199,205 @@
       '    padding:28px 16px 20px;',
       '    border-radius:19px;',
       '  }',
+
       '  .menu-close{',
       '    top:10px;',
       '    right:10px;',
       '  }',
+
       '  .menu-header{',
       '    margin-bottom:20px;',
       '    padding-right:26px;',
       '  }',
+
       '  .menu-mark{',
       '    margin-bottom:12px;',
       '  }',
+
       '  .menu-title{',
       '    font-size:25px;',
       '    max-width:210px;',
       '  }',
+
       '  .menu-subtitle{',
       '    font-size:10.5px;',
       '    margin-top:7px;',
       '  }',
+
       '  .menu-body{',
       '    gap:9px;',
       '  }',
+
       '  .menu-item{',
       '    min-height:74px;',
       '    padding:9px;',
       '    gap:9px;',
       '    border-radius:14px;',
       '  }',
+
       '  .menu-item .ic{',
       '    width:44px;',
       '    height:44px;',
       '    flex-basis:44px;',
       '    border-radius:12px;',
       '  }',
+
       '  .menu-item .line-icon{',
       '    width:22px;',
       '    height:22px;',
       '  }',
+
       '  .menu-item .ic-label{',
       '    font-size:10px;',
       '  }',
+
       '  .menu-item .txt strong{',
       '    font-size:14px;',
       '  }',
+
       '  .menu-item .txt small{',
       '    font-size:10.5px;',
       '  }',
+
       '  .menu-item .chev{',
       '    font-size:24px;',
       '  }',
+
       '  .menu-footer{',
       '    margin-top:20px;',
       '    padding-top:14px;',
       '    font-size:10px;',
       '  }',
-     '  .fab-wrap{',
-'    right:12px;',
-'    bottom:12px;',
-'    width:64px;',
-'    height:64px;',
-'    border-radius:50%;',
-'  }',
+
+      '  .space-modal{',
+      '    width:100%;',
+      '    padding:26px 18px 22px;',
+      '    border-radius:22px;',
+      '  }',
+
+      '  .space-modal .modal-top{',
+      '    margin-bottom:24px;',
+      '  }',
+
+      '  .space-modal .modal-top strong{',
+      '    font-size:19px;',
+      '  }',
+
+      '  .space-modal .close{',
+      '    width:36px;',
+      '    height:36px;',
+      '  }',
+
+      '  .upload-zone{',
+      '    min-height:180px;',
+      '    margin-bottom:28px;',
+      '    padding:18px;',
+      '  }',
+
+      '  .upload-zone p{',
+      '    font-size:13px;',
+      '  }',
+
+      '  .user-note{',
+      '    min-height:118px;',
+      '    padding:16px;',
+      '    font-size:13px;',
+      '  }',
+
+      '  .generate-space-btn{',
+      '    min-height:58px;',
+      '    margin-top:20px;',
+      '    font-size:14px;',
+      '  }',
+
+      '  .space-privacy{',
+      '    margin-top:22px;',
+      '    font-size:11.5px;',
+      '  }',
+
+      '  .fab-wrap{',
+      '    right:12px;',
+      '    bottom:12px;',
+      '    width:64px;',
+      '    height:64px;',
+      '    border-radius:50%;',
+      '  }',
+
       '}'
     ].join('\n');
 
     root.appendChild(style);
 
-    var arOverlay = buildAROverlay(root);
-    var resultOverlay = buildResultOverlay(root);
-    var catalogOverlay = buildCatalogOverlay(
-      root,
-      arOverlay,
-      resultOverlay
-    );
+    var arOverlay =
+      buildAROverlay(root);
 
-    catalogOverlay._storeId = storeId;
+    var resultOverlay =
+      buildResultOverlay(root);
+
+    var spaceOverlay =
+      buildSpaceOverlay(
+        root,
+        currentProduct,
+        resultOverlay
+      );
 
     if (inlineContainer) {
-      // ---------------------------------------------------------
-      // Modo inline: barra de botones fija, en el lugar donde la
-      // mueblería puso el <div> — sin nada flotando por encima del
-      // resto del sitio (útil si ya tienen otro botón flotante,
-      // como el de WhatsApp).
-      // ---------------------------------------------------------
-      var bar = document.createElement('div');
+      var bar =
+        document.createElement('div');
+
       bar.className = 'inline-bar';
 
       bar.innerHTML =
-        '<div class="inline-actions' + (currentProduct ? '' : ' single-btn') + '">' +
+        '<div class="inline-actions' +
         (currentProduct
-          ? '<button class="inline-btn inline-btn-primary" id="inline3d">' + cubeIcon() + ' Ver en 3D</button>'
+          ? ''
+          : ' single-btn') +
+        '">' +
+        (currentProduct
+          ? '<button class="inline-btn inline-btn-primary" id="inline3d">' +
+            cubeIcon() +
+            ' Ver en 3D</button>'
           : '') +
-        '<button class="inline-btn inline-btn-secondary" id="inlineCatalog">' + cameraIcon() + ' Probar en mi espacio</button>' +
+        '<button class="inline-btn inline-btn-secondary" id="inlineSpace">' +
+        cameraIcon() +
+        ' Probar en mi espacio</button>' +
         '</div>' +
         '<div class="inline-poweredby">✦ powered by reality ✦</div>';
 
       root.appendChild(bar);
 
       if (currentProduct) {
-        bar.querySelector('#inline3d').addEventListener('click', function () {
-          openAR(arOverlay, currentProduct);
-        });
+        bar
+          .querySelector('#inline3d')
+          .addEventListener(
+            'click',
+            function () {
+              openAR(
+                arOverlay,
+                currentProduct
+              );
+            }
+          );
       }
 
-      bar.querySelector('#inlineCatalog').addEventListener('click', function () {
-        openCatalog(catalogOverlay);
-      });
+      bar
+        .querySelector('#inlineSpace')
+        .addEventListener(
+          'click',
+          function () {
+            openSpace(spaceOverlay);
+          }
+        );
 
       return;
     }
 
-    // ---------------------------------------------------------
-    // Modo flotante (por defecto): la manchita en la esquina,
-    // con el menú desplegable.
-    // ---------------------------------------------------------
-    var fab = document.createElement('button');
+    var fab =
+      document.createElement('button');
 
     fab.type = 'button';
     fab.className = 'fab-wrap';
+
     fab.setAttribute(
       'aria-label',
       'Abrir visualizador 3D y realidad aumentada'
@@ -1252,13 +1405,16 @@
 
     fab.innerHTML =
       '<img ' +
-      'src="' + SITE_DOMAIN + '/reality-icono-3d-rotacion.png" ' +
+      'src="' +
+      SITE_DOMAIN +
+      '/reality-icono-3d-rotacion.png" ' +
       'alt="" ' +
-      'aria-hidden="true">' ;
+      'aria-hidden="true">';
 
     root.appendChild(fab);
 
-    var menu = document.createElement('div');
+    var menu =
+      document.createElement('div');
 
     menu.className = 'menu hidden';
 
@@ -1276,7 +1432,7 @@
           '  <span class="chev">›</span>' +
           '</button>'
         : '') +
-      '<button class="menu-item" id="optCatalog">' +
+      '<button class="menu-item" id="optSpace">' +
       '  <span class="ic">' +
       cameraIcon() +
       '  </span>' +
@@ -1307,45 +1463,65 @@
 
     root.appendChild(menu);
 
-    var menuClose = menu.querySelector('#menuClose');
+    var menuClose =
+      menu.querySelector('#menuClose');
 
-    menuClose.addEventListener('click', function (event) {
-      event.stopPropagation();
+    menuClose.addEventListener(
+      'click',
+      function (event) {
+        event.stopPropagation();
 
-      menu.classList.add('hidden');
-      fab.classList.remove('is-open');
-    });
-
-    fab.addEventListener('click', function (event) {
-      event.stopPropagation();
-
-      menu.classList.toggle('hidden');
-
-      fab.classList.toggle(
-        'is-open',
-        !menu.classList.contains('hidden')
-      );
-    });
-
-    document.addEventListener('click', function (event) {
-      var path = event.composedPath
-        ? event.composedPath()
-        : [];
-
-      var clickedInside = path.indexOf(host) !== -1;
-
-      if (!clickedInside) {
         menu.classList.add('hidden');
         fab.classList.remove('is-open');
       }
-    });
+    );
 
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') {
-        menu.classList.add('hidden');
-        fab.classList.remove('is-open');
+    fab.addEventListener(
+      'click',
+      function (event) {
+        event.stopPropagation();
+
+        menu.classList.toggle('hidden');
+
+        fab.classList.toggle(
+          'is-open',
+          !menu.classList.contains(
+            'hidden'
+          )
+        );
       }
-    });
+    );
+
+    document.addEventListener(
+      'click',
+      function (event) {
+        var path = event.composedPath
+          ? event.composedPath()
+          : [];
+
+        var clickedInside =
+          path.indexOf(host) !== -1;
+
+        if (!clickedInside) {
+          menu.classList.add('hidden');
+          fab.classList.remove(
+            'is-open'
+          );
+        }
+      }
+    );
+
+    document.addEventListener(
+      'keydown',
+      function (event) {
+        if (event.key === 'Escape') {
+          menu.classList.add('hidden');
+          fab.classList.remove(
+            'is-open'
+          );
+        }
+      }
+    );
 
     if (
       currentProduct &&
@@ -1353,26 +1529,46 @@
     ) {
       menu
         .querySelector('#opt3d')
-        .addEventListener('click', function () {
-          menu.classList.add('hidden');
-          fab.classList.remove('is-open');
+        .addEventListener(
+          'click',
+          function () {
+            menu.classList.add(
+              'hidden'
+            );
 
-          openAR(arOverlay, currentProduct);
-        });
+            fab.classList.remove(
+              'is-open'
+            );
+
+            openAR(
+              arOverlay,
+              currentProduct
+            );
+          }
+        );
     }
 
     menu
-      .querySelector('#optCatalog')
-      .addEventListener('click', function () {
-        menu.classList.add('hidden');
-        fab.classList.remove('is-open');
+      .querySelector('#optSpace')
+      .addEventListener(
+        'click',
+        function () {
+          menu.classList.add(
+            'hidden'
+          );
 
-        openCatalog(catalogOverlay);
-      });
+          fab.classList.remove(
+            'is-open'
+          );
+
+          openSpace(spaceOverlay);
+        }
+      );
   }
 
   function buildAROverlay(root) {
-    var overlay = document.createElement('div');
+    var overlay =
+      document.createElement('div');
 
     overlay.className = 'overlay';
 
@@ -1380,7 +1576,9 @@
       '<div class="modal ar-modal">' +
       '  <div class="modal-top">' +
       '    <div class="modal-top-info">' +
-      '      <span class="modal-icon">' + armchairIcon() + '</span>' +
+      '      <span class="modal-icon">' +
+      armchairIcon() +
+      '</span>' +
       '      <div>' +
       '        <strong id="arTitle"></strong>' +
       '        <div class="ar-dims" id="arDims"></div>' +
@@ -1413,14 +1611,20 @@
       '    <svg class="dim-svg" id="dimSvg"></svg>' +
       '  </div>' +
       '  <div class="hint-row">' +
-      '    ' + scanIcon() +
+      scanIcon() +
       '    <span>Desde el celular, tocá "Abrir en AR" para abrir la cámara y ver el mueble en tu espacio.</span>' +
       '  </div>' +
       '  <div class="action-row">' +
-      '    <button class="dims-toggle" id="dimsToggle">' + pencilIcon() + ' Ver medidas</button>' +
-      '    <button class="ar-open-btn" id="arOpenBtn">' + scanIcon() + ' Abrir en AR</button>' +
+      '    <button class="dims-toggle" id="dimsToggle">' +
+      pencilIcon() +
+      ' Ver medidas</button>' +
+      '    <button class="ar-open-btn" id="arOpenBtn">' +
+      scanIcon() +
+      ' Abrir en AR</button>' +
       '  </div>' +
-      '  <div class="trust-line">' + lockIcon() + ' Tu espacio, a escala real. Seguro y privado.</div>' +
+      '  <div class="trust-line">' +
+      lockIcon() +
+      ' Tu espacio, a escala real. Seguro y privado.</div>' +
       '  <div class="poweredby">powered by reality</div>' +
       '</div>';
 
@@ -1428,191 +1632,505 @@
 
     overlay
       .querySelector('.close')
-      .addEventListener('click', function () {
-        overlay.classList.remove('open');
-        stopDimensionTracking(overlay, overlay.querySelector('#arViewer'));
-      });
+      .addEventListener(
+        'click',
+        function () {
+          overlay.classList.remove(
+            'open'
+          );
 
-    overlay.addEventListener('click', function (event) {
-      if (event.target === overlay) {
-        overlay.classList.remove('open');
-        stopDimensionTracking(overlay, overlay.querySelector('#arViewer'));
+          stopDimensionTracking(
+            overlay,
+            overlay.querySelector(
+              '#arViewer'
+            )
+          );
+        }
+      );
+
+    overlay.addEventListener(
+      'click',
+      function (event) {
+        if (event.target === overlay) {
+          overlay.classList.remove(
+            'open'
+          );
+
+          stopDimensionTracking(
+            overlay,
+            overlay.querySelector(
+              '#arViewer'
+            )
+          );
+        }
       }
-    });
+    );
 
     overlay
       .querySelector('#arOpenBtn')
-      .addEventListener('click', function () {
-        var viewer = overlay.querySelector('#arViewer');
-        if (viewer && viewer.activateAR) viewer.activateAR();
-      });
+      .addEventListener(
+        'click',
+        function () {
+          var viewer =
+            overlay.querySelector(
+              '#arViewer'
+            );
+
+          if (
+            viewer &&
+            viewer.activateAR
+          ) {
+            viewer.activateAR();
+          }
+        }
+      );
 
     overlay
       .querySelector('#dimsToggle')
-      .addEventListener('click', function (event) {
-        var viewer = overlay.querySelector('#arViewer');
-        var showing = overlay.classList.toggle('showing-dims');
+      .addEventListener(
+        'click',
+        function (event) {
+          var viewer =
+            overlay.querySelector(
+              '#arViewer'
+            );
 
-        event.currentTarget.innerHTML = showing
-          ? pencilIcon() + ' Ocultar medidas'
-          : pencilIcon() + ' Ver medidas';
+          var showing =
+            overlay.classList.toggle(
+              'showing-dims'
+            );
 
-        if (showing) {
-          placeMeasurementAnchors(viewer, overlay._currentProduct);
-          startDimensionTracking(overlay, viewer);
-        } else {
-          stopDimensionTracking(overlay, viewer);
+          event.currentTarget.innerHTML =
+            showing
+              ? pencilIcon() +
+                ' Ocultar medidas'
+              : pencilIcon() +
+                ' Ver medidas';
+
+          if (showing) {
+            placeMeasurementAnchors(
+              viewer,
+              overlay._currentProduct
+            );
+
+            startDimensionTracking(
+              overlay,
+              viewer
+            );
+          } else {
+            stopDimensionTracking(
+              overlay,
+              viewer
+            );
+          }
         }
-      });
+      );
 
     return overlay;
   }
 
-  // Ubica las 6 anclas invisibles (dos puntas por cada medida: alto,
-  // ancho y fondo) sobre las esquinas reales del mueble, usando el
-  // tamaño ya corregido por applyRealScale.
-  function placeMeasurementAnchors(viewer, product) {
-    if (!viewer || !product) return;
+  function placeMeasurementAnchors(
+    viewer,
+    product
+  ) {
+    if (!viewer || !product) {
+      return;
+    }
 
     try {
-      var dims = viewer.getDimensions();
-      var center = viewer.getBoundingBoxCenter();
+      var dims =
+        viewer.getDimensions();
+
+      var center =
+        viewer.getBoundingBoxCenter();
 
       var hx = dims.x / 2;
       var hy = dims.y / 2;
       var hz = dims.z / 2;
 
       var points = {
-        'hotspot-alto-top': (center.x - hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
-        'hotspot-alto-bottom': (center.x - hx) + ' ' + (center.y - hy) + ' ' + (center.z + hz),
-        'hotspot-ancho-left': (center.x - hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
-        'hotspot-ancho-right': (center.x + hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
-        'hotspot-fondo-near': (center.x + hx) + ' ' + (center.y + hy) + ' ' + (center.z + hz),
-        'hotspot-fondo-far': (center.x + hx) + ' ' + (center.y + hy) + ' ' + (center.z - hz)
+        'hotspot-alto-top':
+          center.x -
+          hx +
+          ' ' +
+          (center.y + hy) +
+          ' ' +
+          (center.z + hz),
+
+        'hotspot-alto-bottom':
+          center.x -
+          hx +
+          ' ' +
+          (center.y - hy) +
+          ' ' +
+          (center.z + hz),
+
+        'hotspot-ancho-left':
+          center.x -
+          hx +
+          ' ' +
+          (center.y + hy) +
+          ' ' +
+          (center.z + hz),
+
+        'hotspot-ancho-right':
+          center.x +
+          hx +
+          ' ' +
+          (center.y + hy) +
+          ' ' +
+          (center.z + hz),
+
+        'hotspot-fondo-near':
+          center.x +
+          hx +
+          ' ' +
+          (center.y + hy) +
+          ' ' +
+          (center.z + hz),
+
+        'hotspot-fondo-far':
+          center.x +
+          hx +
+          ' ' +
+          (center.y + hy) +
+          ' ' +
+          (center.z - hz)
       };
 
-      Object.keys(points).forEach(function (name) {
-        var el = viewer.querySelector('[slot="' + name + '"]');
-        if (el) el.setAttribute('data-position', points[name]);
-        if (viewer.updateHotspot) {
-          viewer.updateHotspot({ name: name, position: points[name] });
+      Object.keys(points).forEach(
+        function (name) {
+          var element =
+            viewer.querySelector(
+              '[slot="' +
+                name +
+                '"]'
+            );
+
+          if (element) {
+            element.setAttribute(
+              'data-position',
+              points[name]
+            );
+          }
+
+          if (viewer.updateHotspot) {
+            viewer.updateHotspot({
+              name: name,
+              position: points[name]
+            });
+          }
         }
-      });
+      );
 
       viewer._dimValues = {
-        alto: product.alto + ' cm',
-        ancho: product.ancho + ' cm',
-        fondo: product.fondo + ' cm'
+        alto:
+          product.alto + ' cm',
+
+        ancho:
+          product.ancho + ' cm',
+
+        fondo:
+          product.fondo + ' cm'
       };
-    } catch (e) {
-      // si algo falla, simplemente no se muestran las medidas sobre el modelo
+    } catch (error) {
+      // No se muestran las medidas.
     }
   }
 
-  // Dibuja las líneas de medida en el SVG, consultando la posición en
-  // pantalla real de cada ancla (así siguen al mueble cuando lo rotás).
-  function drawDimensionLines(overlay, viewer) {
-    var svg = overlay.querySelector('#dimSvg');
-    if (!svg || !viewer.queryHotspot || !viewer._dimValues) return;
+  function drawDimensionLines(
+    overlay,
+    viewer
+  ) {
+    var svg =
+      overlay.querySelector(
+        '#dimSvg'
+      );
 
-    var rect = viewer.getBoundingClientRect();
-    svg.setAttribute('viewBox', '0 0 ' + rect.width + ' ' + rect.height);
-
-    function point(name) {
-      var hs = viewer.queryHotspot(name);
-      if (!hs || !hs.canvasPosition) return null;
-      return hs.canvasPosition;
+    if (
+      !svg ||
+      !viewer.queryHotspot ||
+      !viewer._dimValues
+    ) {
+      return;
     }
 
-    function dimensionLine(fromName, toName, label, offset) {
-      var a = point(fromName);
-      var b = point(toName);
-      if (!a || !b) return '';
+    var rect =
+      viewer.getBoundingClientRect();
 
-      // vector perpendicular a la línea, para las patitas de los extremos
-      var dx = b.x - a.x;
-      var dy = b.y - a.y;
-      var len = Math.sqrt(dx * dx + dy * dy) || 1;
-      var px = (-dy / len) * 6;
-      var py = (dx / len) * 6;
+    svg.setAttribute(
+      'viewBox',
+      '0 0 ' +
+        rect.width +
+        ' ' +
+        rect.height
+    );
 
-      var midX = (a.x + b.x) / 2;
-      var midY = (a.y + b.y) / 2;
-      var labelWidth = label.length * 6.2 + 14;
+    function point(name) {
+      var hotspot =
+        viewer.queryHotspot(name);
+
+      if (
+        !hotspot ||
+        !hotspot.canvasPosition
+      ) {
+        return null;
+      }
+
+      return hotspot.canvasPosition;
+    }
+
+    function dimensionLine(
+      fromName,
+      toName,
+      label
+    ) {
+      var start = point(fromName);
+      var end = point(toName);
+
+      if (!start || !end) {
+        return '';
+      }
+
+      var dx = end.x - start.x;
+      var dy = end.y - start.y;
+
+      var length =
+        Math.sqrt(
+          dx * dx + dy * dy
+        ) || 1;
+
+      var px =
+        (-dy / length) * 6;
+
+      var py =
+        (dx / length) * 6;
+
+      var middleX =
+        (start.x + end.x) / 2;
+
+      var middleY =
+        (start.y + end.y) / 2;
+
+      var labelWidth =
+        label.length * 6.2 + 14;
 
       return (
-        '<line x1="' + a.x + '" y1="' + a.y + '" x2="' + b.x + '" y2="' + b.y + '"></line>' +
-        '<line class="dim-tick" x1="' + (a.x - px) + '" y1="' + (a.y - py) + '" x2="' + (a.x + px) + '" y2="' + (a.y + py) + '"></line>' +
-        '<line class="dim-tick" x1="' + (b.x - px) + '" y1="' + (b.y - py) + '" x2="' + (b.x + px) + '" y2="' + (b.y + py) + '"></line>' +
-        '<rect class="dim-label-bg" x="' + (midX - labelWidth / 2) + '" y="' + (midY - 10) + '" width="' + labelWidth + '" height="20" rx="10"></rect>' +
-        '<text x="' + midX + '" y="' + (midY + 4) + '" text-anchor="middle">' + escapeHtml(label) + '</text>'
+        '<line x1="' +
+        start.x +
+        '" y1="' +
+        start.y +
+        '" x2="' +
+        end.x +
+        '" y2="' +
+        end.y +
+        '"></line>' +
+
+        '<line class="dim-tick" x1="' +
+        (start.x - px) +
+        '" y1="' +
+        (start.y - py) +
+        '" x2="' +
+        (start.x + px) +
+        '" y2="' +
+        (start.y + py) +
+        '"></line>' +
+
+        '<line class="dim-tick" x1="' +
+        (end.x - px) +
+        '" y1="' +
+        (end.y - py) +
+        '" x2="' +
+        (end.x + px) +
+        '" y2="' +
+        (end.y + py) +
+        '"></line>' +
+
+        '<rect class="dim-label-bg" x="' +
+        (middleX -
+          labelWidth / 2) +
+        '" y="' +
+        (middleY - 10) +
+        '" width="' +
+        labelWidth +
+        '" height="20" rx="10"></rect>' +
+
+        '<text x="' +
+        middleX +
+        '" y="' +
+        (middleY + 4) +
+        '" text-anchor="middle">' +
+        escapeHtml(label) +
+        '</text>'
       );
     }
 
     svg.innerHTML =
-      dimensionLine('hotspot-alto-top', 'hotspot-alto-bottom', viewer._dimValues.alto) +
-      dimensionLine('hotspot-ancho-left', 'hotspot-ancho-right', viewer._dimValues.ancho) +
-      dimensionLine('hotspot-fondo-near', 'hotspot-fondo-far', viewer._dimValues.fondo);
+      dimensionLine(
+        'hotspot-alto-top',
+        'hotspot-alto-bottom',
+        viewer._dimValues.alto
+      ) +
+      dimensionLine(
+        'hotspot-ancho-left',
+        'hotspot-ancho-right',
+        viewer._dimValues.ancho
+      ) +
+      dimensionLine(
+        'hotspot-fondo-near',
+        'hotspot-fondo-far',
+        viewer._dimValues.fondo
+      );
   }
 
-  function startDimensionTracking(overlay, viewer) {
-    stopDimensionTracking(overlay, viewer);
+  function startDimensionTracking(
+    overlay,
+    viewer
+  ) {
+    stopDimensionTracking(
+      overlay,
+      viewer
+    );
 
-    function redraw() { drawDimensionLines(overlay, viewer); }
+    function redraw() {
+      drawDimensionLines(
+        overlay,
+        viewer
+      );
+    }
 
     viewer.__dimRedraw = redraw;
-    viewer.addEventListener('camera-change', redraw);
+
+    viewer.addEventListener(
+      'camera-change',
+      redraw
+    );
+
     redraw();
   }
 
-  function stopDimensionTracking(overlay, viewer) {
-    if (viewer && viewer.__dimRedraw) {
-      viewer.removeEventListener('camera-change', viewer.__dimRedraw);
+  function stopDimensionTracking(
+    overlay,
+    viewer
+  ) {
+    if (
+      viewer &&
+      viewer.__dimRedraw
+    ) {
+      viewer.removeEventListener(
+        'camera-change',
+        viewer.__dimRedraw
+      );
+
       viewer.__dimRedraw = null;
     }
-    var svg = overlay.querySelector('#dimSvg');
-    if (svg) svg.innerHTML = '';
+
+    var svg =
+      overlay.querySelector(
+        '#dimSvg'
+      );
+
+    if (svg) {
+      svg.innerHTML = '';
+    }
   }
 
-  function openAR(overlay, product) {
-    ensureModelViewer().then(function () {
-      overlay.querySelector('#arTitle').textContent =
-        product.name + ' — ' + product.price;
+  function openAR(
+    overlay,
+    product
+  ) {
+    ensureModelViewer().then(
+      function () {
+        overlay.querySelector(
+          '#arTitle'
+        ).textContent =
+          product.name +
+          ' — ' +
+          product.price;
 
-      overlay.querySelector('#arDims').textContent =
-        product.alto + ' × ' + product.ancho + ' × ' + product.fondo + ' cm';
+        overlay.querySelector(
+          '#arDims'
+        ).textContent =
+          product.alto +
+          ' × ' +
+          product.ancho +
+          ' × ' +
+          product.fondo +
+          ' cm';
 
-      var extraDims = Array.isArray(product.extra_measurements)
-        ? product.extra_measurements
-        : [];
+        var extraDims =
+          Array.isArray(
+            product.extra_measurements
+          )
+            ? product.extra_measurements
+            : [];
 
-      overlay.querySelector('#arExtraDims').innerHTML = extraDims
-        .filter(function (m) { return m && m.label && m.value; })
-        .map(function (m) {
-          return (
-            '<span class="ar-extra-dim-item">' +
-            escapeHtml(m.label) + ': ' + escapeHtml(m.value) +
-            '</span>'
+        overlay.querySelector(
+          '#arExtraDims'
+        ).innerHTML = extraDims
+          .filter(function (item) {
+            return (
+              item &&
+              item.label &&
+              item.value
+            );
+          })
+          .map(function (item) {
+            return (
+              '<span class="ar-extra-dim-item">' +
+              escapeHtml(item.label) +
+              ': ' +
+              escapeHtml(item.value) +
+              '</span>'
+            );
+          })
+          .join('');
+
+        var viewer =
+          overlay.querySelector(
+            '#arViewer'
           );
-        })
-        .join('');
 
-      var viewer = overlay.querySelector('#arViewer');
+        viewer.setAttribute(
+          'src',
+          product.model_url
+        );
 
-      viewer.setAttribute('src', product.model_url);
-      applyRealScale(viewer, product.alto, product.ancho, product.fondo);
+        applyRealScale(
+          viewer,
+          product.alto,
+          product.ancho,
+          product.fondo
+        );
 
-      stopDimensionTracking(overlay, viewer);
-      overlay._currentProduct = product;
-      overlay.classList.remove('showing-dims');
-      overlay.querySelector('#dimsToggle').innerHTML = pencilIcon() + ' Ver medidas';
+        stopDimensionTracking(
+          overlay,
+          viewer
+        );
 
-      overlay.classList.add('open');
-    });
+        overlay._currentProduct =
+          product;
+
+        overlay.classList.remove(
+          'showing-dims'
+        );
+
+        overlay.querySelector(
+          '#dimsToggle'
+        ).innerHTML =
+          pencilIcon() +
+          ' Ver medidas';
+
+        overlay.classList.add(
+          'open'
+        );
+      }
+    );
   }
 
   function buildResultOverlay(root) {
-    var overlay = document.createElement('div');
+    var overlay =
+      document.createElement('div');
 
     overlay.className = 'overlay';
 
@@ -1639,311 +2157,265 @@
 
     overlay
       .querySelector('.close')
-      .addEventListener('click', function () {
-        overlay.classList.remove('open');
-      });
+      .addEventListener(
+        'click',
+        function () {
+          overlay.classList.remove(
+            'open'
+          );
+        }
+      );
 
-    overlay.addEventListener('click', function (event) {
-      if (event.target === overlay) {
-        overlay.classList.remove('open');
+    overlay.addEventListener(
+      'click',
+      function (event) {
+        if (event.target === overlay) {
+          overlay.classList.remove(
+            'open'
+          );
+        }
       }
-    });
+    );
 
     return overlay;
   }
 
-  function buildCatalogOverlay(
+  function buildSpaceOverlay(
     root,
-    arOverlay,
+    currentProduct,
     resultOverlay
   ) {
-    var overlay = document.createElement('div');
+    var overlay =
+      document.createElement('div');
 
     overlay.className = 'overlay';
 
     overlay.innerHTML =
-      '<div class="modal">' +
+      '<div class="modal space-modal">' +
       '  <div class="modal-top">' +
       '    <strong>Probá un mueble en tu espacio</strong>' +
       '    <button class="close" aria-label="Cerrar">×</button>' +
       '  </div>' +
+
       '  <div class="upload-zone" id="uploadZone">' +
       '    <div id="uploadPlaceholder">' +
       cameraIcon() +
       '      <p>Subí una foto del lugar donde querés probar un mueble.</p>' +
       '    </div>' +
-      '    <img id="uploadPreview" alt="Vista previa" style="display:none;">' +
-      '    <input ' +
-      '      type="file" ' +
-      '      id="uploadInput" ' +
-      '      accept="image/*" ' +
-      '      style="display:none;">' +
+
+      '    <img id="uploadPreview" alt="Vista previa de tu espacio" style="display:none;">' +
+
+      '    <span class="upload-change">Cambiar foto</span>' +
+
+      '    <input type="file" id="uploadInput" accept="image/*" style="display:none;">' +
       '  </div>' +
+
       '  <textarea ' +
       '    class="user-note" ' +
       '    id="userNote" ' +
       '    placeholder="¿Algo que quieras contarnos? Ej: quiero algo para el rincón de la ventana, o que combine con la pared blanca (opcional)"></textarea>' +
-      '  <button class="analyze-btn" id="analyzeBtn">' +
+
+      '  <button class="generate-space-btn" id="generateSpaceBtn" disabled>' +
       sparkIcon() +
-      '    Buscar qué mueble queda mejor acá' +
+      '    Generar vista en mi espacio' +
       '  </button>' +
-      '  <div class="rec-banner" id="recBanner"></div>' +
-      '  <div class="cat-note">' +
-      '    También podés elegir vos directo del catálogo completo:' +
+
+      '  <div class="space-status" id="spaceStatus"></div>' +
+
+      '  <div class="space-privacy">' +
+      lockIcon() +
+      '    <span>Tus fotos y datos están protegidos y no se publican.</span>' +
       '  </div>' +
-      '  <div class="cat-list" id="catList">' +
-      '    <div class="empty">Cargando catálogo…</div>' +
-      '  </div>' +
-      '  <div class="poweredby">powered by reality</div>' +
+
       '</div>';
 
     root.appendChild(overlay);
 
-    var zone = overlay.querySelector('#uploadZone');
-    var input = overlay.querySelector('#uploadInput');
-    var preview = overlay.querySelector('#uploadPreview');
-    var placeholder = overlay.querySelector(
-      '#uploadPlaceholder'
+    var zone =
+      overlay.querySelector(
+        '#uploadZone'
+      );
+
+    var input =
+      overlay.querySelector(
+        '#uploadInput'
+      );
+
+    var preview =
+      overlay.querySelector(
+        '#uploadPreview'
+      );
+
+    var placeholder =
+      overlay.querySelector(
+        '#uploadPlaceholder'
+      );
+
+    var generateButton =
+      overlay.querySelector(
+        '#generateSpaceBtn'
+      );
+
+    var status =
+      overlay.querySelector(
+        '#spaceStatus'
+      );
+
+    function showStatus(message) {
+      status.textContent = message;
+      status.classList.add('show');
+    }
+
+    function clearStatus() {
+      status.textContent = '';
+      status.classList.remove('show');
+    }
+
+    zone.addEventListener(
+      'click',
+      function () {
+        input.click();
+      }
     );
 
-    var analyzeBtn = overlay.querySelector('#analyzeBtn');
-    var recBanner = overlay.querySelector('#recBanner');
-    var userNoteField = overlay.querySelector('#userNote');
+    input.addEventListener(
+      'change',
+      function (event) {
+        var file =
+          event.target.files[0];
 
-    var uploadedBase64 = null;
-    var uploadedMediaType = null;
+        if (!file) {
+          return;
+        }
 
-    zone.addEventListener('click', function () {
-      input.click();
-    });
+        if (
+          !file.type ||
+          file.type.indexOf(
+            'image/'
+          ) !== 0
+        ) {
+          showStatus(
+            'Elegí un archivo de imagen válido.'
+          );
 
-    input.addEventListener('change', function (event) {
-      var file = event.target.files[0];
+          return;
+        }
 
-      if (!file) {
-        return;
-      }
+        var reader =
+          new FileReader();
 
-      var reader = new FileReader();
+        reader.onload = function (
+          readerEvent
+        ) {
+          preview.src =
+            readerEvent.target.result;
 
-      reader.onload = function (readerEvent) {
-        preview.src = readerEvent.target.result;
-        preview.style.display = 'block';
-        placeholder.style.display = 'none';
+          preview.style.display =
+            'block';
 
-        uploadedBase64 =
-          readerEvent.target.result.split(',')[1];
+          placeholder.style.display =
+            'none';
 
-        uploadedMediaType = file.type;
+          zone.classList.add(
+            'has-image'
+          );
 
-        overlay._uploadedPhoto = {
-          base64: uploadedBase64,
-          mediaType: uploadedMediaType
+          overlay._uploadedPhoto = {
+            base64:
+              readerEvent.target.result.split(
+                ','
+              )[1],
+
+            mediaType: file.type
+          };
+
+          generateButton.disabled =
+            !currentProduct;
+
+          clearStatus();
+
+          if (!currentProduct) {
+            showStatus(
+              'No pudimos identificar el producto de esta página.'
+            );
+          }
         };
 
-        analyzeBtn.classList.add('show');
-        recBanner.classList.remove('show');
-      };
-
-      reader.readAsDataURL(file);
-    });
-
-    analyzeBtn.addEventListener('click', function () {
-      if (!uploadedBase64) {
-        return;
-      }
-
-      analyzeBtn.disabled = true;
-
-      var originalLabel = analyzeBtn.innerHTML;
-
-      analyzeBtn.textContent =
-        'Analizando tu ambiente…';
-
-      var list = overlay.querySelector('#catList');
-      var products = overlay._products || [];
-
-      fetch(SITE_DOMAIN + '/api/recommend', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          imageBase64: uploadedBase64,
-          imageMediaType: uploadedMediaType,
-          userNote: userNoteField.value.trim(),
-          products: products.map(function (product) {
-            return {
-              id: product.id,
-              name: product.name,
-              price: product.price,
-              alto: product.alto,
-              ancho: product.ancho,
-              fondo: product.fondo
-            };
-          })
-        })
-      })
-        .then(function (response) {
-          return response.json();
-        })
-        .then(function (data) {
-          analyzeBtn.disabled = false;
-          analyzeBtn.innerHTML = originalLabel;
-
-          if (
-            data.error ||
-            !data.recommendations ||
-            !data.recommendations.length
-          ) {
-            recBanner.textContent =
-              'No se pudo analizar la foto ahora — elegí del catálogo abajo.';
-
-            recBanner.classList.add('show');
-
-            return;
-          }
-
-          recBanner.textContent =
-            '✦ Encontramos ' +
-            data.recommendations.length +
-            ' mueble(s) que podrían quedar bien acá';
-
-          recBanner.classList.add('show');
-
-          renderCatalogList(
-            list,
-            products,
-            overlay,
-            data.recommendations
+        reader.onerror = function () {
+          showStatus(
+            'No se pudo leer esa imagen. Probá con otra.'
           );
-        })
-        .catch(function () {
-          analyzeBtn.disabled = false;
-          analyzeBtn.innerHTML = originalLabel;
+        };
 
-          recBanner.textContent =
-            'No se pudo analizar la foto ahora — elegí del catálogo abajo.';
+        reader.readAsDataURL(file);
+      }
+    );
 
-          recBanner.classList.add('show');
-        });
-    });
+    generateButton.addEventListener(
+      'click',
+      function () {
+        clearStatus();
+
+        if (
+          !overlay._uploadedPhoto
+        ) {
+          showStatus(
+            'Primero subí una foto de tu espacio.'
+          );
+
+          return;
+        }
+
+        if (!currentProduct) {
+          showStatus(
+            'No pudimos identificar el producto de esta página.'
+          );
+
+          return;
+        }
+
+        generateComposite(
+          overlay,
+          currentProduct,
+          generateButton
+        );
+      }
+    );
 
     overlay
       .querySelector('.close')
-      .addEventListener('click', function () {
-        overlay.classList.remove('open');
-      });
+      .addEventListener(
+        'click',
+        function () {
+          overlay.classList.remove(
+            'open'
+          );
+        }
+      );
 
-    overlay.addEventListener('click', function (event) {
-      if (event.target === overlay) {
-        overlay.classList.remove('open');
+    overlay.addEventListener(
+      'click',
+      function (event) {
+        if (event.target === overlay) {
+          overlay.classList.remove(
+            'open'
+          );
+        }
       }
-    });
+    );
 
-    overlay._loaded = false;
-    overlay._arOverlay = arOverlay;
-    overlay._resultOverlay = resultOverlay;
+    overlay._resultOverlay =
+      resultOverlay;
+
     overlay._root = root;
-    overlay._uploadedPhoto = null;
+
+    overlay._uploadedPhoto =
+      null;
+
+    overlay._currentProduct =
+      currentProduct;
 
     return overlay;
-  }
-
-  function renderCatalogList(
-    list,
-    products,
-    overlay,
-    recommendations
-  ) {
-    var arOverlay = overlay._arOverlay;
-    var recMap = {};
-
-    (recommendations || []).forEach(function (
-      recommendation
-    ) {
-      recMap[recommendation.id] =
-        recommendation.reason;
-    });
-
-    var sorted = products.slice().sort(function (
-      productA,
-      productB
-    ) {
-      var recommendationA = recMap[productA.id]
-        ? 1
-        : 0;
-
-      var recommendationB = recMap[productB.id]
-        ? 1
-        : 0;
-
-      return recommendationB - recommendationA;
-    });
-
-    list.innerHTML = sorted
-      .map(function (product) {
-        var isRecommended = Boolean(
-          recMap[product.id]
-        );
-
-        return (
-          '<div class="cat-item' +
-          (isRecommended ? ' recommended' : '') +
-          '" data-id="' +
-          escapeHtml(product.id) +
-          '">' +
-          '  <div class="info">' +
-          '    <strong>' +
-          (isRecommended ? '✦ ' : '') +
-          escapeHtml(product.name) +
-          '</strong>' +
-          '    <span>' +
-          escapeHtml(product.price) +
-          ' · ' +
-          product.alto +
-          '×' +
-          product.ancho +
-          '×' +
-          product.fondo +
-          ' cm</span>' +
-          (isRecommended
-            ? '<div class="reason">' +
-              escapeHtml(recMap[product.id]) +
-              '</div>'
-            : '') +
-          '  </div>' +
-          '  <div class="cat-actions">' +
-          '    <button class="cat-btn-3d">Ver en 3D</button>' +
-          '    <button class="cat-btn-gen">' +
-          sparkIcon() +
-          '      Generar imagen' +
-          '    </button>' +
-          '  </div>' +
-          '</div>'
-        );
-      })
-      .join('');
-
-    list
-      .querySelectorAll('.cat-item')
-      .forEach(function (item, index) {
-        item
-          .querySelector('.cat-btn-3d')
-          .addEventListener('click', function () {
-            openAR(arOverlay, sorted[index]);
-          });
-
-        item
-          .querySelector('.cat-btn-gen')
-          .addEventListener('click', function (event) {
-            generateComposite(
-              overlay,
-              sorted[index],
-              event.currentTarget
-            );
-          });
-      });
   }
 
   function generateComposite(
@@ -1952,34 +2424,52 @@
     buttonElement
   ) {
     if (!overlay._uploadedPhoto) {
-      var recBanner =
-        overlay.querySelector('#recBanner');
+      var missingPhotoStatus =
+        overlay.querySelector(
+          '#spaceStatus'
+        );
 
-      recBanner.textContent =
-        'Antes subí una foto de tu ambiente, arriba de todo.';
+      if (missingPhotoStatus) {
+        missingPhotoStatus.textContent =
+          'Primero subí una foto de tu espacio.';
 
-      recBanner.classList.add('show');
+        missingPhotoStatus.classList.add(
+          'show'
+        );
+      }
 
       return;
     }
 
-    var originalLabel = buttonElement.innerHTML;
+    var originalLabel =
+      buttonElement.innerHTML;
 
     buttonElement.disabled = true;
-    buttonElement.textContent = 'Preparando…';
+
+    buttonElement.textContent =
+      'Preparando…';
 
     ensureModelViewer()
       .then(function () {
         var snap =
-          document.createElement('model-viewer');
+          document.createElement(
+            'model-viewer'
+          );
 
-        snap.setAttribute('src', product.model_url);
+        snap.setAttribute(
+          'src',
+          product.model_url
+        );
+
         snap.setAttribute(
           'crossorigin',
           'anonymous'
         );
 
-        snap.setAttribute('exposure', '1');
+        snap.setAttribute(
+          'exposure',
+          '1'
+        );
 
         snap.setAttribute(
           'environment-image',
@@ -2007,7 +2497,9 @@
           'pointer-events:none;' +
           'z-index:-1;';
 
-        overlay._root.appendChild(snap);
+        overlay._root.appendChild(
+          snap
+        );
 
         var settled = false;
 
@@ -2019,16 +2511,25 @@
 
           snap.remove();
 
-          buttonElement.disabled = false;
-          buttonElement.innerHTML = originalLabel;
+          buttonElement.disabled =
+            false;
 
-          var recBanner =
-            overlay.querySelector('#recBanner');
+          buttonElement.innerHTML =
+            originalLabel;
 
-          recBanner.textContent =
-            'No se pudo preparar la foto del mueble. Probá de nuevo en un momento.';
+          var status =
+            overlay.querySelector(
+              '#spaceStatus'
+            );
 
-          recBanner.classList.add('show');
+          if (status) {
+            status.textContent =
+              'No se pudo preparar la foto del mueble. Probá de nuevo en un momento.';
+
+            status.classList.add(
+              'show'
+            );
+          }
         }
 
         function cleanupAndCapture() {
@@ -2044,7 +2545,8 @@
               idealAspect: true
             })
             .then(function (blob) {
-              var reader = new FileReader();
+              var reader =
+                new FileReader();
 
               reader.onload = function (
                 readerEvent
@@ -2065,8 +2567,12 @@
                 );
               };
 
-              reader.onerror = failCapture;
-              reader.readAsDataURL(blob);
+              reader.onerror =
+                failCapture;
+
+              reader.readAsDataURL(
+                blob
+              );
             })
             .catch(failCapture);
         }
@@ -2092,8 +2598,11 @@
         );
       })
       .catch(function () {
-        buttonElement.disabled = false;
-        buttonElement.innerHTML = originalLabel;
+        buttonElement.disabled =
+          false;
+
+        buttonElement.innerHTML =
+          originalLabel;
       });
   }
 
@@ -2108,52 +2617,66 @@
       'Generando imagen…';
 
     var noteField =
-      overlay.querySelector('#userNote');
+      overlay.querySelector(
+        '#userNote'
+      );
 
     var userNote = noteField
       ? noteField.value.trim()
       : '';
 
-    fetch(SITE_DOMAIN + '/api/generate-image', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        roomImageBase64:
-          overlay._uploadedPhoto.base64,
+    fetch(
+      SITE_DOMAIN +
+        '/api/generate-image',
+      {
+        method: 'POST',
 
-        roomImageMediaType:
-          overlay._uploadedPhoto.mediaType,
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
 
-        productImageBase64:
-          productBase64,
+        body: JSON.stringify({
+          roomImageBase64:
+            overlay._uploadedPhoto
+              .base64,
 
-        productImageMediaType:
-          'image/png',
+          roomImageMediaType:
+            overlay._uploadedPhoto
+              .mediaType,
 
-        productName:
-          product.name,
+          productImageBase64:
+            productBase64,
 
-        alto:
-          product.alto,
+          productImageMediaType:
+            'image/png',
 
-        ancho:
-          product.ancho,
+          productName:
+            product.name,
 
-        fondo:
-          product.fondo,
+          alto:
+            product.alto,
 
-        userNote:
-          userNote
-      })
-    })
+          ancho:
+            product.ancho,
+
+          fondo:
+            product.fondo,
+
+          userNote:
+            userNote
+        })
+      }
+    )
       .then(function (response) {
         return response.json();
       })
       .then(function (data) {
-        buttonElement.disabled = false;
-        buttonElement.innerHTML = originalLabel;
+        buttonElement.disabled =
+          false;
+
+        buttonElement.innerHTML =
+          originalLabel;
 
         var resultOverlay =
           overlay._resultOverlay;
@@ -2177,22 +2700,33 @@
             .textContent =
             'No se pudo generar la imagen ahora. Probá de nuevo en un rato.';
 
-          image.style.display = 'none';
-          loading.style.display = 'flex';
+          image.style.display =
+            'none';
+
+          loading.style.display =
+            'flex';
         } else {
           image.src =
             'data:image/png;base64,' +
             data.imageBase64;
 
-          image.style.display = 'block';
-          loading.style.display = 'none';
+          image.style.display =
+            'block';
+
+          loading.style.display =
+            'none';
         }
 
-        resultOverlay.classList.add('open');
+        resultOverlay.classList.add(
+          'open'
+        );
       })
       .catch(function () {
-        buttonElement.disabled = false;
-        buttonElement.innerHTML = originalLabel;
+        buttonElement.disabled =
+          false;
+
+        buttonElement.innerHTML =
+          originalLabel;
 
         var resultOverlay =
           overlay._resultOverlay;
@@ -2205,56 +2739,32 @@
           'No se pudo generar la imagen ahora. Probá de nuevo en un rato.';
 
         resultOverlay
-          .querySelector('#resultImage')
-          .style.display = 'none';
+          .querySelector(
+            '#resultImage'
+          )
+          .style.display =
+          'none';
 
         resultOverlay
-          .querySelector('#resultLoading')
-          .style.display = 'flex';
+          .querySelector(
+            '#resultLoading'
+          )
+          .style.display =
+          'flex';
 
-        resultOverlay.classList.add('open');
-      });
-  }
-
-  function openCatalog(overlay) {
-    overlay.classList.add('open');
-
-    if (overlay._loaded) {
-      return;
-    }
-
-    overlay._loaded = true;
-
-    var list =
-      overlay.querySelector('#catList');
-
-    fetchCatalog(overlay._storeId)
-      .then(function (products) {
-        overlay._products = products;
-
-        if (!products.length) {
-          list.innerHTML =
-            '<div class="empty">Todavía no hay productos publicados.</div>';
-
-          return;
-        }
-
-        renderCatalogList(
-          list,
-          products,
-          overlay,
-          []
+        resultOverlay.classList.add(
+          'open'
         );
-      })
-      .catch(function () {
-        list.innerHTML =
-          '<div class="empty">No se pudo cargar el catálogo.</div>';
       });
   }
 
-  // -----------------------------------------------------------
+  function openSpace(overlay) {
+    overlay.classList.add('open');
+  }
 
-  function showMissingStoreError(container) {
+  function showMissingStoreError(
+    container
+  ) {
     container.innerHTML =
       '<div style="font-family:sans-serif;font-size:12px;color:#8C3B2E;">' +
       'Reality: falta el atributo data-store en el código de instalación.' +
@@ -2266,30 +2776,40 @@
   }
 
   function init() {
-    var manual = document.querySelector(
-      '[data-ebano-product]'
-    );
+    var manual =
+      document.querySelector(
+        '[data-ebano-product]'
+      );
 
-    var auto = document.querySelector(
-      '[data-ebano-auto]'
-    );
+    var auto =
+      document.querySelector(
+        '[data-ebano-auto]'
+      );
 
-    var container = manual || auto;
+    var container =
+      manual || auto;
 
     if (!container) {
       return;
     }
 
     var storeId =
-      container.getAttribute('data-store');
+      container.getAttribute(
+        'data-store'
+      );
 
     if (!storeId) {
-      showMissingStoreError(container);
+      showMissingStoreError(
+        container
+      );
 
       return;
     }
 
-    var inline = container.hasAttribute('data-ebano-inline');
+    var inline =
+      container.hasAttribute(
+        'data-ebano-inline'
+      );
 
     if (manual) {
       var idOrSlug =
@@ -2308,20 +2828,39 @@
           );
         })
         .then(function (product) {
-          buildFAB(product, storeId, inline ? container : null);
+          buildFAB(
+            product,
+            storeId,
+            inline
+              ? container
+              : null
+          );
         })
         .catch(function () {
-          buildFAB(null, storeId, inline ? container : null);
+          buildFAB(
+            null,
+            storeId,
+            inline
+              ? container
+              : null
+          );
         });
 
       return;
     }
 
     if (auto) {
-      var slug = slugFromUrl();
+      var slug =
+        slugFromUrl();
 
       if (!slug) {
-        buildFAB(null, storeId, inline ? container : null);
+        buildFAB(
+          null,
+          storeId,
+          inline
+            ? container
+            : null
+        );
 
         return;
       }
@@ -2331,15 +2870,30 @@
         storeId
       )
         .then(function (product) {
-          buildFAB(product, storeId, inline ? container : null);
+          buildFAB(
+            product,
+            storeId,
+            inline
+              ? container
+              : null
+          );
         })
         .catch(function () {
-          buildFAB(null, storeId, inline ? container : null);
+          buildFAB(
+            null,
+            storeId,
+            inline
+              ? container
+              : null
+          );
         });
     }
   }
 
-  if (document.readyState === 'loading') {
+  if (
+    document.readyState ===
+    'loading'
+  ) {
     document.addEventListener(
       'DOMContentLoaded',
       init
