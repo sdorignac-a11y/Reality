@@ -1,33 +1,25 @@
 'use client';
-
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Script from 'next/script';
 import { supabase } from '../lib/supabaseClient';
-
 function applyRealScale(modelViewer, alto, ancho, fondo) {
   function doScale() {
     try {
       const dims = modelViewer.getDimensions();
       const current = modelViewer.scale || { x: 1, y: 1, z: 1 };
-
       const baseX = dims.x / (current.x || 1);
       const baseY = dims.y / (current.y || 1);
       const baseZ = dims.z / (current.z || 1);
-
       const targetX = (Number(ancho) || 0) / 100;
       const targetY = (Number(alto) || 0) / 100;
       const targetZ = (Number(fondo) || 0) / 100;
-
       const scaleX =
         baseX > 0 && targetX > 0 ? targetX / baseX : 1;
-
       const scaleY =
         baseY > 0 && targetY > 0 ? targetY / baseY : 1;
-
       const scaleZ =
         baseZ > 0 && targetZ > 0 ? targetZ / baseZ : 1;
-
       if (
         ![scaleX, scaleY, scaleZ].every(
           (number) => isFinite(number) && number > 0
@@ -35,7 +27,6 @@ function applyRealScale(modelViewer, alto, ancho, fondo) {
       ) {
         return;
       }
-
       modelViewer.setAttribute(
         'scale',
         `${scaleX} ${scaleY} ${scaleZ}`
@@ -44,68 +35,53 @@ function applyRealScale(modelViewer, alto, ancho, fondo) {
       // Mantiene la escala original si ocurre un error.
     }
   }
-
   modelViewer.addEventListener('load', doScale);
-
   if (modelViewer.loaded) {
     doScale();
   }
-
   return () => {
     modelViewer.removeEventListener('load', doScale);
   };
 }
-
 function placeMeasurementAnchors(viewer, product) {
   if (!viewer || !product) return;
-
   try {
     const dims = viewer.getDimensions();
     const center = viewer.getBoundingBoxCenter();
-
     const halfWidth = dims.x / 2;
     const halfHeight = dims.y / 2;
     const halfDepth = dims.z / 2;
-
     const points = {
       'hotspot-alto-top':
         `${center.x - halfWidth} ` +
         `${center.y + halfHeight} ` +
         `${center.z + halfDepth}`,
-
       'hotspot-alto-bottom':
         `${center.x - halfWidth} ` +
         `${center.y - halfHeight} ` +
         `${center.z + halfDepth}`,
-
       'hotspot-ancho-left':
         `${center.x - halfWidth} ` +
         `${center.y + halfHeight} ` +
         `${center.z + halfDepth}`,
-
       'hotspot-ancho-right':
         `${center.x + halfWidth} ` +
         `${center.y + halfHeight} ` +
         `${center.z + halfDepth}`,
-
       'hotspot-fondo-near':
         `${center.x + halfWidth} ` +
         `${center.y + halfHeight} ` +
         `${center.z + halfDepth}`,
-
       'hotspot-fondo-far':
         `${center.x + halfWidth} ` +
         `${center.y + halfHeight} ` +
         `${center.z - halfDepth}`,
     };
-
     Object.entries(points).forEach(([name, position]) => {
       const element = viewer.querySelector(`[slot="${name}"]`);
-
       if (element) {
         element.setAttribute('data-position', position);
       }
-
       if (viewer.updateHotspot) {
         viewer.updateHotspot({
           name,
@@ -113,7 +89,6 @@ function placeMeasurementAnchors(viewer, product) {
         });
       }
     });
-
     viewer._dimValues = {
       alto: `${product.alto} cm`,
       ancho: `${product.ancho} cm`,
@@ -123,7 +98,6 @@ function placeMeasurementAnchors(viewer, product) {
     // No muestra las medidas si ocurre un error.
   }
 }
-
 function escapeHtml(value) {
   return String(value).replace(
     /[&<>"']/g,
@@ -137,42 +111,31 @@ function escapeHtml(value) {
       })[character]
   );
 }
-
 function drawDimensionLines(svg, viewer) {
   if (!svg || !viewer.queryHotspot || !viewer._dimValues) {
     return;
   }
-
   const rect = viewer.getBoundingClientRect();
-
   svg.setAttribute(
     'viewBox',
     `0 0 ${rect.width} ${rect.height}`
   );
-
   function getPoint(name) {
     const hotspot = viewer.queryHotspot(name);
-
     return hotspot?.canvasPosition || null;
   }
-
   function createDimensionLine(fromName, toName, label) {
     const start = getPoint(fromName);
     const end = getPoint(toName);
-
     if (!start || !end) return '';
-
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const length = Math.sqrt(dx * dx + dy * dy) || 1;
-
     const perpendicularX = (-dy / length) * 6;
     const perpendicularY = (dx / length) * 6;
-
     const middleX = (start.x + end.x) / 2;
     const middleY = (start.y + end.y) / 2;
     const labelWidth = label.length * 6.2 + 14;
-
     return (
       `<line ` +
       `x1="${start.x}" ` +
@@ -180,21 +143,18 @@ function drawDimensionLines(svg, viewer) {
       `x2="${end.x}" ` +
       `y2="${end.y}">` +
       `</line>` +
-
       `<line class="dim-tick" ` +
       `x1="${start.x - perpendicularX}" ` +
       `y1="${start.y - perpendicularY}" ` +
       `x2="${start.x + perpendicularX}" ` +
       `y2="${start.y + perpendicularY}">` +
       `</line>` +
-
       `<line class="dim-tick" ` +
       `x1="${end.x - perpendicularX}" ` +
       `y1="${end.y - perpendicularY}" ` +
       `x2="${end.x + perpendicularX}" ` +
       `y2="${end.y + perpendicularY}">` +
       `</line>` +
-
       `<rect class="dim-label-bg" ` +
       `x="${middleX - labelWidth / 2}" ` +
       `y="${middleY - 10}" ` +
@@ -202,7 +162,6 @@ function drawDimensionLines(svg, viewer) {
       `height="20" ` +
       `rx="10">` +
       `</rect>` +
-
       `<text ` +
       `x="${middleX}" ` +
       `y="${middleY + 4}" ` +
@@ -211,7 +170,6 @@ function drawDimensionLines(svg, viewer) {
       `</text>`
     );
   }
-
   svg.innerHTML =
     createDimensionLine(
       'hotspot-alto-top',
@@ -229,17 +187,13 @@ function drawDimensionLines(svg, viewer) {
       viewer._dimValues.fondo
     );
 }
-
 export default function HomePage() {
   const [products, setProducts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showingDims, setShowingDims] = useState(false);
-
   const selected = products[selectedIndex] || null;
-
   const demoViewerRef = useRef(null);
   const demoSvgRef = useRef(null);
-
   useEffect(() => {
     supabase
       .from('products')
@@ -254,12 +208,10 @@ export default function HomePage() {
         }
       });
   }, []);
-
   useEffect(() => {
     if (!selected || !demoViewerRef.current) {
       return;
     }
-
     return applyRealScale(
       demoViewerRef.current,
       selected.alto,
@@ -267,69 +219,52 @@ export default function HomePage() {
       selected.fondo
     );
   }, [selected]);
-
   useEffect(() => {
     setShowingDims(false);
   }, [selectedIndex]);
-
   useEffect(() => {
     const viewer = demoViewerRef.current;
     const svg = demoSvgRef.current;
-
     if (!viewer || !svg || !selected || !showingDims) {
       return;
     }
-
     const redraw = () => {
       placeMeasurementAnchors(viewer, selected);
       drawDimensionLines(svg, viewer);
     };
-
     viewer.addEventListener('load', redraw);
     viewer.addEventListener('camera-change', redraw);
     window.addEventListener('resize', redraw);
-
     requestAnimationFrame(redraw);
-
     return () => {
       viewer.removeEventListener('load', redraw);
       viewer.removeEventListener('camera-change', redraw);
       window.removeEventListener('resize', redraw);
     };
   }, [showingDims, selected]);
-
   useEffect(() => {
     if (window.lucide) {
       window.lucide.createIcons();
     }
   }, [products, selectedIndex, showingDims]);
-
   useEffect(() => {
     document.title =
       'Reality — Probá los muebles en tu casa';
-
     if (window.lucide) {
       window.lucide.createIcons();
     }
-
     const menuButton =
       document.getElementById('menuButton');
-
     const navLinks =
       document.getElementById('navLinks');
-
     const pilotForm =
       document.getElementById('pilotForm');
-
     const toast =
       document.getElementById('toast');
-
     const toastTitle =
       document.getElementById('toastTitle');
-
     const toastMessage =
       document.getElementById('toastMessage');
-
     if (
       !menuButton ||
       !navLinks ||
@@ -340,53 +275,41 @@ export default function HomePage() {
     ) {
       return;
     }
-
     function handleMenuClick() {
       const isOpen =
         navLinks.classList.toggle('open');
-
       menuButton.setAttribute(
         'aria-expanded',
         String(isOpen)
       );
-
       menuButton.innerHTML = isOpen
         ? '<i data-lucide="x"></i>'
         : '<i data-lucide="menu"></i>';
-
       if (window.lucide) {
         window.lucide.createIcons();
       }
     }
-
     menuButton.addEventListener(
       'click',
       handleMenuClick
     );
-
     const navLinkElements =
       navLinks.querySelectorAll('a');
-
     function closeMenu() {
       navLinks.classList.remove('open');
-
       menuButton.setAttribute(
         'aria-expanded',
         'false'
       );
-
       menuButton.innerHTML =
         '<i data-lucide="menu"></i>';
-
       if (window.lucide) {
         window.lucide.createIcons();
       }
     }
-
     navLinkElements.forEach((link) => {
       link.addEventListener('click', closeMenu);
     });
-
     const revealObserver =
       new IntersectionObserver(
         (entries) => {
@@ -401,58 +324,44 @@ export default function HomePage() {
           threshold: 0.14,
         }
       );
-
     document
       .querySelectorAll('.reveal')
       .forEach((element) => {
         revealObserver.observe(element);
       });
-
     let toastTimer;
-
     function showToast(title, message) {
       clearTimeout(toastTimer);
-
       toastTitle.textContent = title;
       toastMessage.textContent = message;
       toast.classList.add('show');
-
       toastTimer = setTimeout(() => {
         toast.classList.remove('show');
       }, 3400);
     }
-
     async function handlePilotSubmit(event) {
       event.preventDefault();
-
       const businessName =
         document
           .getElementById('businessName')
           ?.value.trim() || '';
-
       const contactEmail =
         document
           .getElementById('contactEmail')
           ?.value.trim() || '';
-
       const website =
         document
           .getElementById('website')
           ?.value.trim() || '';
-
       const submitButton =
         event.currentTarget.querySelector(
           'button[type="submit"]'
         );
-
       if (!submitButton) return;
-
       const originalLabel =
         submitButton.innerHTML;
-
       submitButton.disabled = true;
       submitButton.textContent = 'Enviando…';
-
       try {
         const response = await fetch(
           '/api/pilot-lead',
@@ -468,20 +377,16 @@ export default function HomePage() {
             }),
           }
         );
-
         const data = await response.json();
-
         if (!response.ok || data.error) {
           throw new Error(
             data.error || 'No se pudo enviar'
           );
         }
-
         showToast(
           'Solicitud enviada',
           `${businessName || 'Tu mueblería'} quedó registrada para la prueba piloto.`
         );
-
         event.currentTarget.reset();
       } catch (error) {
         showToast(
@@ -491,32 +396,26 @@ export default function HomePage() {
       } finally {
         submitButton.disabled = false;
         submitButton.innerHTML = originalLabel;
-
         if (window.lucide) {
           window.lucide.createIcons();
         }
       }
     }
-
     pilotForm.addEventListener(
       'submit',
       handlePilotSubmit
     );
-
     return () => {
       clearTimeout(toastTimer);
       revealObserver.disconnect();
-
       menuButton.removeEventListener(
         'click',
         handleMenuClick
       );
-
       pilotForm.removeEventListener(
         'submit',
         handlePilotSubmit
       );
-
       navLinkElements.forEach((link) => {
         link.removeEventListener(
           'click',
@@ -525,30 +424,25 @@ export default function HomePage() {
       });
     };
   }, []);
-
   return (
     <>
       <link
         rel="preconnect"
         href="https://fonts.googleapis.com"
       />
-
       <link
         rel="preconnect"
         href="https://fonts.gstatic.com"
         crossOrigin=""
       />
-
       <link
         href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet"
       />
-
       <Script
         src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"
         strategy="beforeInteractive"
       />
-
       <style>{`
         :root {
           --blue-900: #143c82;
@@ -571,16 +465,13 @@ export default function HomePage() {
           --radius-xl: 38px;
           --container: min(1040px, calc(100% - 32px));
         }
-
         * {
           box-sizing: border-box;
         }
-
         html {
           scroll-behavior: smooth;
           scroll-padding-top: 100px;
         }
-
         body {
           margin: 0;
           color: var(--text);
@@ -605,29 +496,24 @@ export default function HomePage() {
           line-height: 1.55;
           overflow-x: hidden;
         }
-
         img,
         svg {
           display: block;
           max-width: 100%;
         }
-
         button,
         input,
         textarea {
           font: inherit;
         }
-
         button,
         a {
           -webkit-tap-highlight-color: transparent;
         }
-
         a {
           color: inherit;
           text-decoration: none;
         }
-
         h1,
         h2,
         h3,
@@ -635,7 +521,6 @@ export default function HomePage() {
         p {
           margin-top: 0;
         }
-
         h1,
         h2,
         h3,
@@ -646,16 +531,13 @@ export default function HomePage() {
           line-height: 1.02;
           letter-spacing: -0.025em;
         }
-
         .container {
           width: var(--container);
           margin-inline: auto;
         }
-
         .section {
           padding: 56px 0;
         }
-
         .section-card {
           width: var(--container);
           margin-inline: auto;
@@ -666,25 +548,21 @@ export default function HomePage() {
           box-shadow: var(--shadow-md);
           backdrop-filter: blur(18px);
         }
-
         .section-heading {
           max-width: 640px;
           margin: 0 auto 30px;
           text-align: center;
         }
-
         .section-heading h2 {
           margin-bottom: 10px;
           font-size: clamp(1.7rem, 3vw, 2.4rem);
           font-weight: 800;
         }
-
         .section-heading p {
           margin-bottom: 0;
           font-size: 0.96rem;
           color: var(--muted);
         }
-
         .eyebrow {
           display: inline-flex;
           align-items: center;
@@ -699,12 +577,10 @@ export default function HomePage() {
           font-weight: 900;
           box-shadow: var(--shadow-sm);
         }
-
         .eyebrow i {
           width: 14px;
           height: 14px;
         }
-
         .btn {
           min-height: 44px;
           display: inline-flex;
@@ -722,11 +598,9 @@ export default function HomePage() {
             box-shadow 0.2s ease,
             background 0.2s ease;
         }
-
         .btn:hover {
           transform: translateY(-2px);
         }
-
         .btn-primary {
           color: var(--white);
           background: linear-gradient(
@@ -737,12 +611,10 @@ export default function HomePage() {
           box-shadow:
             0 10px 22px rgba(29, 108, 232, 0.28);
         }
-
         .btn-primary:hover {
           box-shadow:
             0 14px 28px rgba(29, 108, 232, 0.34);
         }
-
         .btn-secondary {
           color: var(--blue-700);
           background: rgba(255, 255, 255, 0.95);
@@ -750,19 +622,16 @@ export default function HomePage() {
             1px solid rgba(49, 126, 235, 0.14);
           box-shadow: var(--shadow-sm);
         }
-
         .btn-small {
           min-height: 38px;
           padding: 0 15px;
           border-radius: 11px;
           font-size: 0.82rem;
         }
-
         .btn i {
           width: 15px;
           height: 15px;
         }
-
         .navbar-shell {
           position: sticky;
           z-index: 1000;
@@ -770,7 +639,6 @@ export default function HomePage() {
           padding: 12px 0 0;
           pointer-events: none;
         }
-
         .navbar {
           width: var(--container);
           min-height: 58px;
@@ -790,14 +658,12 @@ export default function HomePage() {
           backdrop-filter: blur(20px);
           pointer-events: auto;
         }
-
         .logo {
           display: flex;
           align-items: center;
           gap: 8px;
           flex: 0 0 auto;
         }
-
         .logo-mark {
           width: 34px;
           height: 34px;
@@ -810,19 +676,16 @@ export default function HomePage() {
           box-shadow:
             inset 0 0 0 3px var(--blue-100);
         }
-
         .logo-mark i {
           width: 18px;
           height: 18px;
           stroke-width: 2.4;
         }
-
         .brand {
           font-size: 1.32rem;
           font-weight: 800;
           color: var(--blue-700);
         }
-
         .nav-links {
           display: flex;
           align-items: center;
@@ -832,15 +695,12 @@ export default function HomePage() {
           font-size: 0.82rem;
           font-weight: 900;
         }
-
         .nav-links a {
           transition: color 0.2s ease;
         }
-
         .nav-links a:hover {
           color: var(--blue-700);
         }
-
         .menu-button {
           display: none;
           width: 38px;
@@ -852,7 +712,6 @@ export default function HomePage() {
           color: var(--blue-700);
           cursor: pointer;
         }
-
         .hero {
           position: relative;
           min-height: 680px;
@@ -874,7 +733,6 @@ export default function HomePage() {
               #f1f7ff 100%
             );
         }
-
         .hero::before {
           content: "";
           position: absolute;
@@ -890,7 +748,6 @@ export default function HomePage() {
             0 0 90px rgba(91, 157, 242, 0.08);
           pointer-events: none;
         }
-
         .hero::after {
           content: "";
           position: absolute;
@@ -906,7 +763,6 @@ export default function HomePage() {
           transform: translateX(-50%);
           pointer-events: none;
         }
-
         .hero-content {
           position: relative;
           z-index: 5;
@@ -916,7 +772,6 @@ export default function HomePage() {
           margin: 0 auto;
           text-align: center;
         }
-
         .hero .eyebrow {
           margin-bottom: 22px;
           padding: 10px 17px;
@@ -929,12 +784,10 @@ export default function HomePage() {
           box-shadow:
             0 10px 30px rgba(47, 94, 167, 0.08);
         }
-
         .hero .eyebrow i {
           width: 19px;
           height: 19px;
         }
-
         .hero h1 {
           margin-bottom: 24px;
           color: #14366f;
@@ -944,7 +797,6 @@ export default function HomePage() {
           line-height: 0.96;
           letter-spacing: -0.042em;
         }
-
         .hero h1 span {
           position: relative;
           display: block;
@@ -953,7 +805,6 @@ export default function HomePage() {
           margin: 8px auto 0;
           color: #176fe9;
         }
-
         .hero h1 span::after {
           content: "";
           position: absolute;
@@ -965,7 +816,6 @@ export default function HomePage() {
           border-radius: 50%;
           transform: rotate(-1deg);
         }
-
         .hero-copy {
           max-width: 660px;
           margin: 0 auto 27px;
@@ -974,7 +824,6 @@ export default function HomePage() {
             clamp(1rem, 1.3vw, 1.12rem);
           line-height: 1.62;
         }
-
         .hero-actions {
           display: flex;
           flex-wrap: wrap;
@@ -983,14 +832,12 @@ export default function HomePage() {
           gap: 12px;
           margin-bottom: 26px;
         }
-
         .hero-actions .btn {
           min-width: 235px;
           min-height: 53px;
           border-radius: 15px;
           font-size: 0.93rem;
         }
-
         .hero-actions .btn-primary {
           background:
             linear-gradient(
@@ -1001,21 +848,18 @@ export default function HomePage() {
           box-shadow:
             0 15px 30px rgba(28, 105, 228, 0.28);
         }
-
         .hero-actions .btn-secondary {
           background:
             rgba(255, 255, 255, 0.96);
           box-shadow:
             0 11px 28px rgba(46, 87, 148, 0.09);
         }
-
         .hero-pills {
           display: flex;
           flex-wrap: wrap;
           justify-content: center;
           gap: 10px;
         }
-
         .micro-pill {
           min-height: 46px;
           display: flex;
@@ -1034,12 +878,10 @@ export default function HomePage() {
             0 10px 28px rgba(43, 89, 160, 0.08);
           backdrop-filter: blur(14px);
         }
-
         .micro-pill i {
           width: 19px;
           height: 19px;
         }
-
         .hero-scene {
           position: absolute;
           z-index: 2;
@@ -1052,13 +894,11 @@ export default function HomePage() {
               0 24px 30px rgba(37, 77, 132, 0.12)
             );
         }
-
         .hero-scene img {
           width: 100%;
           height: auto;
           display: block;
         }
-
         .hero-scene-left {
           left:
             max(
@@ -1066,7 +906,6 @@ export default function HomePage() {
               calc((100vw - 1540px) / 2)
             );
         }
-
         .hero-scene-right {
           right:
             max(
@@ -1076,7 +915,6 @@ export default function HomePage() {
           width:
             clamp(270px, 24vw, 400px);
         }
-
         .hero-dots {
           position: absolute;
           z-index: 1;
@@ -1094,7 +932,6 @@ export default function HomePage() {
           background-size: 24px 24px;
           pointer-events: none;
         }
-
         .hero-wave {
           position: absolute;
           z-index: 3;
@@ -1105,18 +942,15 @@ export default function HomePage() {
           height: 72px;
           pointer-events: none;
         }
-
         .hero-wave path {
           fill: #ffffff;
         }
-
         .comparison-grid {
           display: grid;
           grid-template-columns:
             repeat(2, minmax(0, 1fr));
           gap: 16px;
         }
-
         .comparison-card {
           position: relative;
           overflow: hidden;
@@ -1127,7 +961,6 @@ export default function HomePage() {
             1px solid rgba(40, 95, 178, 0.08);
           box-shadow: var(--shadow-sm);
         }
-
         .comparison-card.bad {
           background:
             linear-gradient(
@@ -1137,7 +970,6 @@ export default function HomePage() {
             ),
             #fff;
         }
-
         .comparison-card.good {
           background:
             linear-gradient(
@@ -1147,7 +979,6 @@ export default function HomePage() {
             ),
             #fff;
         }
-
         .comparison-top {
           display: grid;
           grid-template-columns: 1fr 48%;
@@ -1155,7 +986,6 @@ export default function HomePage() {
           align-items: center;
           height: 100%;
         }
-
         .status-pill {
           display: inline-flex;
           align-items: center;
@@ -1169,20 +999,16 @@ export default function HomePage() {
           font-weight: 900;
           box-shadow: var(--shadow-sm);
         }
-
         .bad .status-pill {
           color: #ef5668;
         }
-
         .good .status-pill {
           color: var(--blue-700);
         }
-
         .status-pill i {
           width: 14px;
           height: 14px;
         }
-
         .check-list {
           display: grid;
           gap: 9px;
@@ -1193,28 +1019,23 @@ export default function HomePage() {
           font-size: 0.82rem;
           font-weight: 700;
         }
-
         .check-list li {
           display: flex;
           align-items: flex-start;
           gap: 7px;
         }
-
         .check-list i {
           width: 14px;
           height: 14px;
           margin-top: 2px;
           flex: 0 0 auto;
         }
-
         .bad .check-list i {
           color: var(--danger);
         }
-
         .good .check-list i {
           color: var(--blue-700);
         }
-
         .comparison-image {
           position: relative;
           overflow: hidden;
@@ -1225,7 +1046,6 @@ export default function HomePage() {
           box-shadow:
             0 12px 22px rgba(35, 65, 108, 0.14);
         }
-
         .bad .comparison-image {
           background-image:
             linear-gradient(
@@ -1236,7 +1056,6 @@ export default function HomePage() {
           filter:
             grayscale(0.5) saturate(0.75);
         }
-
         .good .comparison-image {
           background-image:
             linear-gradient(
@@ -1245,7 +1064,6 @@ export default function HomePage() {
             ),
             url("https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?auto=format&fit=crop&w=900&q=88");
         }
-
         .comparison-badge {
           position: absolute;
           right: 12px;
@@ -1260,15 +1078,12 @@ export default function HomePage() {
           box-shadow:
             0 10px 24px rgba(30, 62, 111, 0.22);
         }
-
         .bad .comparison-badge {
           background: var(--danger);
         }
-
         .good .comparison-badge {
           background: var(--blue-700);
         }
-
         .steps {
           position: relative;
           display: grid;
@@ -1276,7 +1091,6 @@ export default function HomePage() {
             repeat(3, minmax(0, 1fr));
           gap: 18px;
         }
-
         .step-card {
           position: relative;
           min-height: 250px;
@@ -1292,12 +1106,10 @@ export default function HomePage() {
             transform 0.2s ease,
             box-shadow 0.2s ease;
         }
-
         .step-card:hover {
           transform: translateY(-5px);
           box-shadow: var(--shadow-md);
         }
-
         .step-number {
           position: absolute;
           top: -15px;
@@ -1322,7 +1134,6 @@ export default function HomePage() {
             0 8px 18px rgba(27, 105, 224, 0.28);
           transform: translateX(-50%);
         }
-
         .step-visual {
           position: relative;
           height: 108px;
@@ -1330,7 +1141,6 @@ export default function HomePage() {
           place-items: center;
           margin-bottom: 14px;
         }
-
         .step-visual::before {
           content: "";
           position: absolute;
@@ -1345,7 +1155,6 @@ export default function HomePage() {
             );
           box-shadow: var(--shadow-sm);
         }
-
         .step-visual i {
           position: relative;
           z-index: 2;
@@ -1354,19 +1163,16 @@ export default function HomePage() {
           color: var(--blue-600);
           stroke-width: 1.45;
         }
-
         .step-card h3 {
           margin-bottom: 7px;
           font-size: 1.14rem;
           font-weight: 800;
         }
-
         .step-card p {
           margin-bottom: 0;
           color: var(--muted);
           font-size: 0.83rem;
         }
-
         .demo-section {
           background:
             radial-gradient(
@@ -1380,34 +1186,29 @@ export default function HomePage() {
               #edf6ff
             );
         }
-
         .demo-layout {
           display: grid;
           grid-template-columns: 0.78fr 1.65fr;
           gap: 20px;
           align-items: stretch;
         }
-
         .demo-intro {
           display: flex;
           flex-direction: column;
           justify-content: center;
           padding: 12px 6px 12px 2px;
         }
-
         .demo-intro h2 {
           margin-bottom: 10px;
           font-size:
             clamp(1.7rem, 3vw, 2.4rem);
           font-weight: 800;
         }
-
         .demo-intro p {
           margin-bottom: 16px;
           color: var(--muted);
           font-size: 0.92rem;
         }
-
         .demo-note {
           display: flex;
           align-items: flex-start;
@@ -1422,14 +1223,12 @@ export default function HomePage() {
           font-size: 0.78rem;
           box-shadow: var(--shadow-sm);
         }
-
         .demo-note i {
           width: 16px;
           height: 16px;
           color: var(--blue-700);
           flex: 0 0 auto;
         }
-
         .widget {
           overflow: hidden;
           display: grid;
@@ -1441,7 +1240,6 @@ export default function HomePage() {
           background: var(--white);
           box-shadow: var(--shadow-lg);
         }
-
         .product-panel {
           position: relative;
           z-index: 4;
@@ -1453,7 +1251,6 @@ export default function HomePage() {
           display: flex;
           flex-direction: column;
         }
-
         .label {
           display: block;
           margin-bottom: 8px;
@@ -1463,7 +1260,6 @@ export default function HomePage() {
           text-transform: uppercase;
           letter-spacing: 0.03em;
         }
-
         .product-list {
           display: flex;
           flex-direction: column;
@@ -1472,7 +1268,6 @@ export default function HomePage() {
           overflow-y: auto;
           max-height: 210px;
         }
-
         .product-list-item {
           display: flex;
           flex-direction: column;
@@ -1489,34 +1284,28 @@ export default function HomePage() {
             border-color 0.15s ease,
             background 0.15s ease;
         }
-
         .product-list-item strong {
           font-size: 0.82rem;
           color: var(--navy);
         }
-
         .product-list-item span {
           font-size: 0.72rem;
           color: var(--muted);
           font-weight: 700;
         }
-
         .product-list-item.active {
           border-color: var(--blue-600);
           background: var(--blue-50);
         }
-
         .product-list-item:hover {
           border-color: var(--blue-500);
         }
-
         .empty-note {
           padding: 10px 4px;
           color: var(--muted);
           font-size: 0.8rem;
           text-align: center;
         }
-
         .dims-toggle-btn {
           width: 100%;
           min-height: 40px;
@@ -1538,17 +1327,14 @@ export default function HomePage() {
             background 0.2s ease,
             border-color 0.2s ease;
         }
-
         .dims-toggle-btn:hover {
           background: var(--blue-50);
           border-color: var(--blue-300);
         }
-
         .dims-toggle-btn i {
           width: 14px;
           height: 14px;
         }
-
         .demo-dim-svg {
           position: absolute;
           z-index: 4;
@@ -1557,30 +1343,25 @@ export default function HomePage() {
           height: 100%;
           pointer-events: none;
         }
-
         .demo-dim-svg line {
           stroke: var(--blue-700);
           stroke-width: 1.5;
         }
-
         .demo-dim-svg .dim-tick {
           stroke: var(--blue-700);
           stroke-width: 1.5;
         }
-
         .demo-dim-svg text {
           font-family: "Nunito", sans-serif;
           font-size: 11px;
           font-weight: 900;
           fill: var(--navy);
         }
-
         .demo-dim-svg .dim-label-bg {
           fill: rgba(255, 255, 255, 0.96);
           stroke: #cddaf0;
           stroke-width: 1;
         }
-
         .powered-by {
           display: flex;
           align-items: center;
@@ -1590,18 +1371,15 @@ export default function HomePage() {
           font-size: 0.66rem;
           font-weight: 800;
         }
-
         .powered-by strong {
           color: var(--blue-700);
         }
-
         .ar-stage {
           position: relative;
           overflow: hidden;
           min-height: 400px;
           background: #fafcff;
         }
-
         .ar-real-btn {
           padding: 10px 16px;
           border: none;
@@ -1612,7 +1390,6 @@ export default function HomePage() {
           font-weight: 800;
           cursor: pointer;
         }
-
         .lock-pill {
           position: absolute;
           z-index: 6;
@@ -1631,19 +1408,16 @@ export default function HomePage() {
           box-shadow: var(--shadow-sm);
           transform: translateX(-50%);
         }
-
         .lock-pill i {
           width: 11px;
           height: 11px;
         }
-
         .benefits-grid {
           display: grid;
           grid-template-columns:
             repeat(4, minmax(0, 1fr));
           gap: 14px;
         }
-
         .benefit-card {
           min-height: 185px;
           padding: 20px 16px;
@@ -1662,12 +1436,10 @@ export default function HomePage() {
             transform 0.2s ease,
             box-shadow 0.2s ease;
         }
-
         .benefit-card:hover {
           transform: translateY(-5px);
           box-shadow: var(--shadow-md);
         }
-
         .benefit-icon {
           width: 58px;
           height: 58px;
@@ -1681,29 +1453,24 @@ export default function HomePage() {
             inset 0 0 0 1px
             rgba(44, 124, 242, 0.1);
         }
-
         .benefit-icon i {
           width: 29px;
           height: 29px;
           stroke-width: 1.5;
         }
-
         .benefit-card h3 {
           margin-bottom: 6px;
           font-size: 1.02rem;
           font-weight: 800;
         }
-
         .benefit-card p {
           margin-bottom: 0;
           color: var(--muted);
           font-size: 0.8rem;
         }
-
         .cta-section {
           padding: 12px 0 56px;
         }
-
         .cta-card {
           position: relative;
           overflow: hidden;
@@ -1732,7 +1499,6 @@ export default function HomePage() {
           box-shadow:
             0 22px 52px rgba(28, 91, 194, 0.25);
         }
-
         .cta-card::before,
         .cta-card::after {
           content: "✦";
@@ -1741,23 +1507,19 @@ export default function HomePage() {
             rgba(255, 255, 255, 0.25);
           font-size: 3rem;
         }
-
         .cta-card::before {
           top: 18px;
           right: 34%;
         }
-
         .cta-card::after {
           right: 30px;
           bottom: 20px;
           font-size: 1.6rem;
         }
-
         .cta-copy {
           position: relative;
           z-index: 2;
         }
-
         .cta-copy h2 {
           max-width: 560px;
           margin-bottom: 10px;
@@ -1766,7 +1528,6 @@ export default function HomePage() {
             clamp(1.9rem, 3.5vw, 2.8rem);
           font-weight: 800;
         }
-
         .cta-copy p {
           max-width: 480px;
           margin-bottom: 18px;
@@ -1774,18 +1535,15 @@ export default function HomePage() {
             rgba(255, 255, 255, 0.83);
           font-size: 0.9rem;
         }
-
         .pilot-proof {
           display: flex;
           align-items: center;
           gap: 11px;
           margin-top: 16px;
         }
-
         .avatars {
           display: flex;
         }
-
         .avatar {
           width: 31px;
           height: 31px;
@@ -1805,18 +1563,15 @@ export default function HomePage() {
           font-size: 0.66rem;
           font-weight: 900;
         }
-
         .avatar:first-child {
           margin-left: 0;
         }
-
         .pilot-proof span {
           color:
             rgba(255, 255, 255, 0.86);
           font-size: 0.74rem;
           font-weight: 800;
         }
-
         .pilot-form {
           position: relative;
           z-index: 3;
@@ -1828,26 +1583,22 @@ export default function HomePage() {
             rgba(255, 255, 255, 0.14);
           backdrop-filter: blur(14px);
         }
-
         .pilot-form h3 {
           margin-bottom: 11px;
           color: var(--white);
           font-size: 1.24rem;
         }
-
         .field {
           display: grid;
           gap: 5px;
           margin-bottom: 10px;
         }
-
         .field label {
           color:
             rgba(255, 255, 255, 0.88);
           font-size: 0.7rem;
           font-weight: 900;
         }
-
         .field input {
           width: 100%;
           height: 40px;
@@ -1864,24 +1615,20 @@ export default function HomePage() {
             box-shadow 0.2s ease,
             border 0.2s ease;
         }
-
         .field input:focus {
           border-color: #9bc7ff;
           box-shadow:
             0 0 0 4px rgba(255, 255, 255, 0.2);
         }
-
         .pilot-form .btn {
           width: 100%;
           margin-top: 4px;
           color: var(--blue-700);
           background: var(--white);
         }
-
         footer {
           padding: 24px 0 34px;
         }
-
         .footer-inner {
           display: flex;
           align-items: center;
@@ -1890,13 +1637,11 @@ export default function HomePage() {
           color: var(--muted);
           font-size: 0.84rem;
         }
-
         .footer-mini {
           display: flex;
           gap: 20px;
           font-weight: 800;
         }
-
         .toast {
           position: fixed;
           z-index: 3000;
@@ -1922,30 +1667,25 @@ export default function HomePage() {
             opacity 0.22s ease,
             transform 0.22s ease;
         }
-
         .toast.show {
           opacity: 1;
           transform: translateY(0);
         }
-
         .toast i {
           width: 22px;
           height: 22px;
           color: var(--blue-700);
           flex: 0 0 auto;
         }
-
         .toast strong {
           display: block;
           margin-bottom: 2px;
           color: var(--navy);
         }
-
         .toast span {
           color: var(--muted);
           font-size: 0.86rem;
         }
-
         .reveal {
           opacity: 0;
           transform: translateY(22px);
@@ -1953,110 +1693,88 @@ export default function HomePage() {
             opacity 0.65s ease,
             transform 0.65s ease;
         }
-
         .reveal.visible {
           opacity: 1;
           transform: translateY(0);
         }
-
         @media (max-width: 1220px) {
           .hero {
             min-height: 650px;
           }
-
           .hero-content {
             max-width: 720px;
           }
-
           .hero h1 {
             font-size:
               clamp(3.1rem, 5.7vw, 4.55rem);
           }
-
           .hero-scene {
             bottom: 80px;
             width:
               clamp(220px, 24vw, 300px);
             opacity: 0.92;
           }
-
           .hero-scene-right {
             width:
               clamp(235px, 25vw, 320px);
           }
         }
-
         @media (max-width: 1020px) {
           .nav-links {
             gap: 18px;
           }
-
           .comparison-top {
             grid-template-columns: 1fr;
           }
-
           .comparison-image {
             height: 170px;
           }
-
           .demo-layout {
             grid-template-columns: 1fr;
           }
-
           .demo-intro {
             text-align: center;
           }
-
           .demo-note {
             max-width: 500px;
             margin-inline: auto;
           }
-
           .benefits-grid {
             grid-template-columns:
               repeat(2, minmax(0, 1fr));
           }
-
           .cta-card {
             grid-template-columns: 1fr;
           }
         }
-
         @media (max-width: 930px) {
           .hero {
             min-height: 620px;
             padding-top: 64px;
           }
-
           .hero-content {
             max-width: 680px;
           }
-
           .hero-scene {
             bottom: 50px;
             width: 225px;
             opacity: 0.23;
           }
-
           .hero-scene-left {
             left: -65px;
           }
-
           .hero-scene-right {
             right: -75px;
             width: 245px;
           }
-
           .hero-dots {
             display: none;
           }
         }
-
         @media (max-width: 820px) {
           .navbar {
             position: relative;
           }
-
           .nav-links {
             position: absolute;
             top: calc(100% + 10px);
@@ -2079,209 +1797,166 @@ export default function HomePage() {
               transform 0.2s ease,
               visibility 0.2s ease;
           }
-
           .nav-links.open {
             opacity: 1;
             visibility: visible;
             transform: translateY(0);
           }
-
           .nav-links a {
             padding: 12px;
             border-radius: 12px;
           }
-
           .nav-links a:hover {
             background: var(--blue-100);
           }
-
           .navbar > .btn {
             display: none;
           }
-
           .menu-button {
             display: grid;
           }
-
           .comparison-grid,
           .steps {
             grid-template-columns: 1fr;
           }
-
           .steps {
             gap: 30px;
           }
-
           .section-card {
             padding: 26px 18px;
           }
-
           .widget {
             grid-template-columns: 1fr;
           }
-
           .product-panel {
             border-right: 0;
             border-bottom:
               1px solid rgba(26, 91, 184, 0.09);
           }
-
           .ar-stage {
             min-height: 360px;
           }
-
           .cta-card {
             padding: 28px 20px;
           }
-
           .footer-inner {
             flex-direction: column;
             text-align: center;
           }
         }
-
         @media (max-width: 620px) {
           .hero {
             min-height: 650px;
             padding: 55px 0 105px;
           }
-
           .hero::before {
             width: 210px;
             height: 210px;
           }
-
           .hero .eyebrow {
             margin-bottom: 18px;
             padding: 8px 12px;
             font-size: 0.74rem;
           }
-
           .hero h1 {
             margin-bottom: 22px;
             font-size:
               clamp(2.7rem, 13vw, 3.75rem);
             line-height: 0.98;
           }
-
           .hero h1 span {
             margin-top: 6px;
           }
-
           .hero h1 span::after {
             bottom: -9px;
             border-top-width: 4px;
           }
-
           .hero-copy {
             font-size: 0.95rem;
           }
-
           .hero-actions {
             display: grid;
             width: 100%;
           }
-
           .hero-actions .btn {
             width: min(100%, 340px);
             min-width: 0;
             margin-inline: auto;
           }
-
           .hero-pills {
             gap: 7px;
           }
-
           .micro-pill {
             min-height: 40px;
             padding: 0 11px;
             font-size: 0.7rem;
           }
-
           .micro-pill i {
             width: 16px;
             height: 16px;
           }
-
           .hero-scene {
             display: none;
           }
-
           .hero-wave {
             height: 48px;
           }
         }
-
         @media (max-width: 560px) {
           :root {
             --container:
               min(100% - 22px, 1180px);
           }
-
           .section {
             padding: 44px 0;
           }
-
           .navbar-shell {
             padding-top: 10px;
           }
-
           .navbar {
             min-height: 54px;
             padding: 6px 8px 6px 11px;
             border-radius: 16px;
           }
-
           .logo-mark {
             width: 30px;
             height: 30px;
             border-radius: 9px;
           }
-
           .brand {
             font-size: 1.14rem;
           }
-
           .comparison-card {
             min-height: 0;
             padding: 14px;
           }
-
           .comparison-image {
             height: 150px;
           }
-
           .benefits-grid {
             grid-template-columns: 1fr;
           }
-
           .widget {
             border-width: 4px;
             border-radius: 20px;
           }
-
           .product-panel {
             padding: 16px 14px;
           }
-
           .ar-stage {
             min-height: 320px;
           }
-
           .lock-pill {
             display: none;
           }
-
           .cta-card {
             border-radius: 22px;
           }
-
           .cta-copy h2 {
             font-size: 2.1rem;
           }
         }
       `}</style>
-
       <div className="navbar-shell">
         <nav
           className="navbar"
@@ -2295,12 +1970,10 @@ export default function HomePage() {
             <span className="logo-mark">
               <i data-lucide="armchair"></i>
             </span>
-
             <span className="brand">
               Reality
             </span>
           </a>
-
           <div
             className="nav-links"
             id="navLinks"
@@ -2308,27 +1981,22 @@ export default function HomePage() {
             <a href="#problema">
               El problema
             </a>
-
             <a href="#como-funciona">
               Cómo funciona
             </a>
-
             <a href="#demo">
               Demo
             </a>
-
             <a href="#beneficios">
               Beneficios
             </a>
           </div>
-
           <Link
             href="/login"
             className="btn btn-primary btn-small"
           >
             Iniciar sesión
           </Link>
-
           <button
             className="menu-button"
             id="menuButton"
@@ -2340,7 +2008,6 @@ export default function HomePage() {
           </button>
         </nav>
       </div>
-
       <main>
         <section
           className="hero"
@@ -2350,7 +2017,6 @@ export default function HomePage() {
             className="hero-dots"
             aria-hidden="true"
           ></div>
-
           <div
             className="hero-scene hero-scene-left"
             aria-hidden="true"
@@ -2364,7 +2030,6 @@ export default function HomePage() {
               draggable="false"
             />
           </div>
-
           <div
             className="hero-scene hero-scene-right"
             aria-hidden="true"
@@ -2378,26 +2043,22 @@ export default function HomePage() {
               draggable="false"
             />
           </div>
-
           <div className="hero-content reveal">
             <div className="eyebrow">
               <i data-lucide="sparkles"></i>
               Realidad aumentada para mueblerías
             </div>
-
             <h1>
               Tus clientes prueban los muebles
               en su casa
               <span>antes de comprar</span>
             </h1>
-
             <p className="hero-copy">
               Reality permite visualizar cada mueble en
               el ambiente real, con escala, proporciones
               y colores precisos. Más confianza, menos
               dudas y más ventas.
             </p>
-
             <div className="hero-actions">
               <a
                 className="btn btn-primary"
@@ -2406,7 +2067,6 @@ export default function HomePage() {
                 Quiero ser mueblería piloto
                 <i data-lucide="arrow-right"></i>
               </a>
-
               <a
                 className="btn btn-secondary"
                 href="#demo"
@@ -2415,30 +2075,25 @@ export default function HomePage() {
                 Ver cómo funciona
               </a>
             </div>
-
             <div className="hero-pills">
               <span className="micro-pill">
                 <i data-lucide="smartphone"></i>
                 Sin apps
               </span>
-
               <span className="micro-pill">
                 <i data-lucide="ruler"></i>
                 Escala real
               </span>
-
               <span className="micro-pill">
                 <i data-lucide="code-2"></i>
                 Fácil de integrar
               </span>
-
               <span className="micro-pill">
                 <i data-lucide="zap"></i>
                 Listo en minutos
               </span>
             </div>
           </div>
-
           <svg
             className="hero-wave"
             viewBox="0 0 1440 80"
@@ -2448,7 +2103,6 @@ export default function HomePage() {
             <path d="M0,48 C180,12 310,73 520,54 C710,37 822,18 1030,52 C1200,79 1320,31 1440,45 L1440,80 L0,80 Z" />
           </svg>
         </section>
-
         <section
           className="section"
           id="problema"
@@ -2459,19 +2113,16 @@ export default function HomePage() {
                 <i data-lucide="circle-help"></i>
                 Menos incertidumbre
               </span>
-
               <h2>
                 Comprar muebles hoy es incierto.
                 Con Reality, ya no.
               </h2>
-
               <p>
                 El cliente deja de imaginar cómo quedaría
                 el producto y puede verlo directamente en
                 su espacio antes de decidir.
               </p>
             </div>
-
             <div className="comparison-grid">
               <article className="comparison-card bad">
                 <div className="comparison-top">
@@ -2480,35 +2131,29 @@ export default function HomePage() {
                       <i data-lucide="circle-x"></i>
                       Sin Reality
                     </div>
-
                     <ul className="check-list">
                       <li>
                         <i data-lucide="x-circle"></i>
                         No saben si va a quedar bien.
                       </li>
-
                       <li>
                         <i data-lucide="x-circle"></i>
                         Dudas sobre tamaño y color.
                       </li>
-
                       <li>
                         <i data-lucide="x-circle"></i>
                         Más preguntas antes de comprar.
                       </li>
-
                       <li>
                         <i data-lucide="x-circle"></i>
                         Devoluciones y cancelaciones.
                       </li>
-
                       <li>
                         <i data-lucide="x-circle"></i>
                         Menos confianza, menos ventas.
                       </li>
                     </ul>
                   </div>
-
                   <div className="comparison-image">
                     <div className="comparison-badge">
                       <i data-lucide="x"></i>
@@ -2516,7 +2161,6 @@ export default function HomePage() {
                   </div>
                 </div>
               </article>
-
               <article className="comparison-card good">
                 <div className="comparison-top">
                   <div>
@@ -2524,35 +2168,29 @@ export default function HomePage() {
                       <i data-lucide="badge-check"></i>
                       Con Reality
                     </div>
-
                     <ul className="check-list">
                       <li>
                         <i data-lucide="check-circle-2"></i>
                         Lo prueban en su espacio.
                       </li>
-
                       <li>
                         <i data-lucide="check-circle-2"></i>
                         Ven tamaño y proporciones reales.
                       </li>
-
                       <li>
                         <i data-lucide="check-circle-2"></i>
                         Compran con mayor confianza.
                       </li>
-
                       <li>
                         <i data-lucide="check-circle-2"></i>
                         Menos devoluciones.
                       </li>
-
                       <li>
                         <i data-lucide="check-circle-2"></i>
                         Más conversiones para tu tienda.
                       </li>
                     </ul>
                   </div>
-
                   <div className="comparison-image">
                     <div className="comparison-badge">
                       <i data-lucide="check"></i>
@@ -2563,7 +2201,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
         <section
           className="section"
           id="como-funciona"
@@ -2574,71 +2211,57 @@ export default function HomePage() {
                 <i data-lucide="workflow"></i>
                 Configuración simple
               </span>
-
               <h2>
                 Así de simple funciona
               </h2>
-
               <p>
                 Nosotros nos ocupamos de la parte técnica
                 para que tu equipo pueda empezar sin
                 cambiar su forma de trabajar.
               </p>
             </div>
-
             <div className="steps">
               <article className="step-card reveal">
                 <div className="step-number">
                   1
                 </div>
-
                 <div className="step-visual">
                   <i data-lucide="cloud-upload"></i>
                 </div>
-
                 <h3>
                   Enviás tus productos
                 </h3>
-
                 <p>
                   Subís fotos, medidas, colores y variantes
                   desde un panel simple e intuitivo.
                 </p>
               </article>
-
               <article className="step-card reveal">
                 <div className="step-number">
                   2
                 </div>
-
                 <div className="step-visual">
                   <i data-lucide="scan-search"></i>
                 </div>
-
                 <h3>
                   Revisamos y publicamos
                 </h3>
-
                 <p>
                   Nuestro equipo controla cada producto y
                   lo deja listo para usarse en realidad
                   aumentada.
                 </p>
               </article>
-
               <article className="step-card reveal">
                 <div className="step-number">
                   3
                 </div>
-
                 <div className="step-visual">
                   <i data-lucide="code-xml"></i>
                 </div>
-
                 <h3>
                   Lo instalás en tu sitio
                 </h3>
-
                 <p>
                   Pegás un código simple y listo. No
                   necesitás migrar de plataforma ni
@@ -2648,7 +2271,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
         <section
           className="section demo-section"
           id="demo"
@@ -2660,21 +2282,17 @@ export default function HomePage() {
                   <i data-lucide="sparkles"></i>
                   Catálogo real
                 </span>
-
                 <h2>
                   Viendo es creyendo
                 </h2>
-
                 <p>
                   Esto no es una simulación: son los
                   productos reales cargados en la
                   plataforma. Elegí uno de la lista y
                   probalo en 3D.
                 </p>
-
                 <div className="demo-note">
                   <i data-lucide="move"></i>
-
                   <span>
                     Desde el celular, el botón “Ver en tu
                     espacio” abre la cámara real y ancla
@@ -2682,20 +2300,17 @@ export default function HomePage() {
                   </span>
                 </div>
               </div>
-
               <div className="widget">
                 <aside className="product-panel">
                   <span className="label">
                     Catálogo publicado
                   </span>
-
                   <div className="product-list">
                     {products.length === 0 && (
                       <div className="empty-note">
                         Todavía no hay productos publicados.
                       </div>
                     )}
-
                     {products.map((product, index) => (
                       <button
                         key={product.id}
@@ -2714,14 +2329,12 @@ export default function HomePage() {
                         <strong>
                           {product.name}
                         </strong>
-
                         <span>
                           {product.price}
                         </span>
                       </button>
                     ))}
                   </div>
-
                   {selected && (
                     <button
                       type="button"
@@ -2734,25 +2347,21 @@ export default function HomePage() {
                       }}
                     >
                       <i data-lucide="ruler"></i>
-
                       {showingDims
                         ? 'Ocultar medidas'
                         : 'Ver medidas sobre el mueble'}
                     </button>
                   )}
-
                   <div className="powered-by">
                     Con tecnología de
                     <strong>Reality</strong>
                   </div>
                 </aside>
-
                 <div className="ar-stage">
                   <span className="lock-pill">
                     <i data-lucide="lock-keyhole"></i>
                     Escala real bloqueada
                   </span>
-
                   {selected ? (
                     <>
                       {/* eslint-disable-next-line react/no-unknown-property */}
@@ -2781,42 +2390,36 @@ export default function HomePage() {
                         >
                           Ver en tu espacio (AR)
                         </button>
-
                         {/* eslint-disable-next-line react/no-unknown-property */}
                         <span
                           slot="hotspot-alto-top"
                           data-position="0 0 0"
                           style={{ display: 'none' }}
                         ></span>
-
                         {/* eslint-disable-next-line react/no-unknown-property */}
                         <span
                           slot="hotspot-alto-bottom"
                           data-position="0 0 0"
                           style={{ display: 'none' }}
                         ></span>
-
                         {/* eslint-disable-next-line react/no-unknown-property */}
                         <span
                           slot="hotspot-ancho-left"
                           data-position="0 0 0"
                           style={{ display: 'none' }}
                         ></span>
-
                         {/* eslint-disable-next-line react/no-unknown-property */}
                         <span
                           slot="hotspot-ancho-right"
                           data-position="0 0 0"
                           style={{ display: 'none' }}
                         ></span>
-
                         {/* eslint-disable-next-line react/no-unknown-property */}
                         <span
                           slot="hotspot-fondo-near"
                           data-position="0 0 0"
                           style={{ display: 'none' }}
                         ></span>
-
                         {/* eslint-disable-next-line react/no-unknown-property */}
                         <span
                           slot="hotspot-fondo-far"
@@ -2824,7 +2427,6 @@ export default function HomePage() {
                           style={{ display: 'none' }}
                         ></span>
                       </model-viewer>
-
                       {showingDims && (
                         <svg
                           ref={demoSvgRef}
@@ -2846,7 +2448,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
         <section
           className="section"
           id="beneficios"
@@ -2857,75 +2458,61 @@ export default function HomePage() {
                 <i data-lucide="heart-handshake"></i>
                 Hecho para mueblerías
               </span>
-
               <h2>
                 Pensado para vender más sin complicar
                 tu operación
               </h2>
-
               <p>
                 Reality se adapta a tu tienda actual y
                 deja la experiencia técnica resuelta para
                 tu equipo y tus clientes.
               </p>
             </div>
-
             <div className="benefits-grid">
               <article className="benefit-card reveal">
                 <div className="benefit-icon">
                   <i data-lucide="scan-3d"></i>
                 </div>
-
                 <h3>
                   Escala real bloqueada
                 </h3>
-
                 <p>
                   Tus muebles se ven en tamaño real y con
                   proporciones exactas, sin distorsiones.
                 </p>
               </article>
-
               <article className="benefit-card reveal">
                 <div className="benefit-icon">
                   <i data-lucide="cloud-upload"></i>
                 </div>
-
                 <h3>
                   Panel simple de carga
                 </h3>
-
                 <p>
                   Subí productos y variantes fácilmente.
                   Nosotros nos ocupamos de lo técnico.
                 </p>
               </article>
-
               <article className="benefit-card reveal">
                 <div className="benefit-icon">
                   <i data-lucide="blocks"></i>
                 </div>
-
                 <h3>
                   Integración sin migrar
                 </h3>
-
                 <p>
                   Funciona con tu tienda actual: Shopify,
                   Tiendanube, WooCommerce o desarrollo
                   propio.
                 </p>
               </article>
-
               <article className="benefit-card reveal">
                 <div className="benefit-icon">
                   <i data-lucide="globe-2"></i>
                 </div>
-
                 <h3>
                   Funciona sin apps
                 </h3>
-
                 <p>
                   El cliente lo usa desde el navegador de
                   su celular. No necesita descargar nada.
@@ -2934,7 +2521,6 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-
         <section
           className="cta-section"
           id="piloto"
@@ -2945,13 +2531,11 @@ export default function HomePage() {
                 Sumate como mueblería piloto y llevá tus
                 ventas al siguiente nivel
               </h2>
-
               <p>
                 Estamos seleccionando mueblerías que
                 quieran probar Reality, sumar productos y
                 crecer junto a nosotros desde el comienzo.
               </p>
-
               <div className="pilot-proof">
                 <div
                   className="avatars"
@@ -2960,23 +2544,19 @@ export default function HomePage() {
                   <span className="avatar">
                     MR
                   </span>
-
                   <span className="avatar">
                     CN
                   </span>
-
                   <span className="avatar">
                     LM
                   </span>
                 </div>
-
                 <span>
                   Más mueblerías ya están probando la
                   experiencia.
                 </span>
               </div>
             </div>
-
             <form
               className="pilot-form"
               id="pilotForm"
@@ -2984,12 +2564,10 @@ export default function HomePage() {
               <h3>
                 Quiero conocer Reality
               </h3>
-
               <div className="field">
                 <label htmlFor="businessName">
                   Nombre de la mueblería
                 </label>
-
                 <input
                   id="businessName"
                   name="businessName"
@@ -2998,12 +2576,10 @@ export default function HomePage() {
                   required
                 />
               </div>
-
               <div className="field">
                 <label htmlFor="contactEmail">
                   Email de contacto
                 </label>
-
                 <input
                   id="contactEmail"
                   name="contactEmail"
@@ -3012,12 +2588,10 @@ export default function HomePage() {
                   required
                 />
               </div>
-
               <div className="field">
                 <label htmlFor="website">
                   Sitio web o Instagram
                 </label>
-
                 <input
                   id="website"
                   name="website"
@@ -3025,7 +2599,6 @@ export default function HomePage() {
                   placeholder="@tumuebleria"
                 />
               </div>
-
               <button
                 className="btn"
                 type="submit"
@@ -3037,36 +2610,30 @@ export default function HomePage() {
           </div>
         </section>
       </main>
-
       <footer>
         <div className="container footer-inner">
           <div className="logo">
             <span className="logo-mark">
               <i data-lucide="armchair"></i>
             </span>
-
             <span className="brand">
               Reality
             </span>
           </div>
-
           <span>
             © 2026 Reality. Realidad aumentada para
             mueblerías.
           </span>
-
           <div className="footer-mini">
             <a href="#inicio">
               Inicio
             </a>
-
             <a href="#demo">
               Demo
             </a>
           </div>
         </div>
       </footer>
-
       <div
         className="toast"
         id="toast"
@@ -3074,17 +2641,28 @@ export default function HomePage() {
         aria-live="polite"
       >
         <i data-lucide="badge-check"></i>
-
         <div>
           <strong id="toastTitle">
             Listo
           </strong>
-
           <span id="toastMessage">
             La acción se completó correctamente.
           </span>
         </div>
       </div>
+
+      {/* Widget de Reality — el mismo código real que le damos a
+          cualquier mueblería cliente, corriendo acá en nuestro propio
+          sitio como prueba de que es 100% real, no una maqueta. */}
+      <Script
+        src="https://cutzstudio.vercel.app/widget.js"
+        strategy="afterInteractive"
+      />
+      {/* eslint-disable-next-line react/no-unknown-property */}
+      <div
+        data-ebano-product="esquinero-urban"
+        data-store="1632b6d9-af04-427e-a8ef-444df1773699"
+      ></div>
     </>
   );
 }
