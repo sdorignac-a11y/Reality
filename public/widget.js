@@ -365,12 +365,16 @@
       '  width:39px;',
       '  height:39px;',
       '  display:block;',
-      '  fill:none;',
+      '  fill:none !important;',
       '  stroke:#8A552F;',
       '  stroke-width:2.8;',
       '  stroke-linecap:round;',
       '  stroke-linejoin:round;',
       '  transition:transform .22s ease;',
+      '}',
+
+      '.fab-wrap svg *{',
+      '  fill:none !important;',
       '}',
 
       '.fab-wrap:hover{',
@@ -1251,14 +1255,19 @@
     fab.className = 'fab-wrap';
 fab.setAttribute('aria-label', 'Abrir visualizador 3D y AR');
 
-fab.innerHTML =
-  '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-  '  <path d="M32 13 46 21 32 29 18 21 32 13Z" />' +
-  '  <path d="M18 21v16l14 8 14-8V21" />' +
-  '  <path d="M32 29v16" />' +
-  '  <path d="M11 35c1.8 10.7 11.1 18.8 22.2 18.8 7.7 0 14.5-3.8 18.6-9.7" />' +
-  '  <path d="m46.2 44.4 6-.8-.8 6" />' +
-  '</svg>';
+    fab.innerHTML =
+      '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '  <g style="fill:none !important;stroke:#8A552F !important;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round;">' +
+
+      '    <path style="fill:none !important;" d="M32 12 45 19.5 32 27 19 19.5 32 12Z" />' +
+      '    <path style="fill:none !important;" d="M19 19.5v15L32 42l13-7.5v-15" />' +
+      '    <path style="fill:none !important;" d="M32 27v15" />' +
+
+      '    <path style="fill:none !important;" d="M13 27c-4 2.8-6 6.2-6 9.5C7 45 18.2 52 32 52c7.2 0 13.6-1.9 18-5.1" />' +
+      '    <path style="fill:none !important;" d="m44.5 44.5 6 2-2 6" />' +
+
+      '  </g>' +
+      '</svg>';
 
     root.appendChild(fab);
 
