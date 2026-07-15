@@ -394,9 +394,6 @@
 '.menu.hidden{',
 '  display:none;',
 '}',
-      '  display:none;',
-      '}',
-
       '.menu-card{',
       '  position:relative;',
       '  width:286px;',
